@@ -1,0 +1,139 @@
+@layer theme, base, antd, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/preflight.css' layer(base);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../../resources/views/**/*.blade.php';
+@source '../../resources/js/**/*.{ts,tsx}';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-reading: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+
+    --color-parchment-50: #fbf8f3;
+    --color-parchment-100: #f5efe5;
+    --color-parchment-200: #e9dfd0;
+    --color-parchment-300: #d8c6ad;
+    --color-ink-900: #2b2520;
+    --color-ink-700: #4a4038;
+    --color-ink-500: #746a60;
+    --color-leather-700: #6f4e37;
+    --color-leather-600: #8b5e3c;
+    --color-leather-100: #f2e7dc;
+}
+
+html {
+    background: var(--color-parchment-50);
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--color-ink-900);
+    background: var(--color-parchment-50);
+    font-family: var(--font-sans);
+}
+
+.reading-pane {
+    font-family: var(--font-reading);
+    color: var(--color-ink-900);
+    font-size: 1.075rem;
+    line-height: 1.8;
+    overflow-wrap: anywhere;
+}
+
+.reading-pane h1,
+.reading-pane h2,
+.reading-pane h3,
+.reading-pane h4,
+.reading-pane h5,
+.reading-pane h6 {
+    font-family: var(--font-reading);
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 1.4em 0 0.6em;
+    color: var(--color-ink-900);
+}
+
+.reading-pane h1 {
+    font-size: 1.5rem;
+}
+
+.reading-pane h2 {
+    font-size: 1.3rem;
+}
+
+.reading-pane h3 {
+    font-size: 1.15rem;
+}
+
+.reading-pane p {
+    margin: 0 0 1.05em;
+}
+
+.reading-pane blockquote {
+    margin: 1em 0;
+    padding-left: 1em;
+    border-left: 2px solid var(--color-parchment-300);
+    color: var(--color-ink-700);
+    font-style: italic;
+}
+
+.reading-pane li {
+    margin: 0.3em 0 0.3em 1.4em;
+    list-style: disc;
+}
+
+.reading-pane pre {
+    white-space: pre-wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--color-parchment-100);
+    border-radius: 6px;
+    padding: 0.75rem;
+}
+
+.reading-list-item {
+    position: relative;
+    margin: 0.3em 0;
+    padding-left: 1.3em;
+}
+
+.reading-list-item::before {
+    content: '•';
+    position: absolute;
+    left: 0.4em;
+    color: var(--color-ink-500);
+}
+
+.reading-pane .block-muted {
+    color: var(--color-ink-500);
+}
+
+.reading-pane .block-placeholder {
+    color: #aaa098;
+    font-style: italic;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #cfc3b4 transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: #cfc3b4;
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-track {
+    background: transparent;
+}

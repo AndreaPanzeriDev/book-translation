@@ -1,0 +1,53 @@
+name: book-translation-convert
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:5173:5173"
+    # Le variabili applicative vengono lette da Laravel direttamente da .env
+    # (bind mount). Non usare env_file: .env qui: compose fisserebbe i valori
+    # alla creazione del container, quindi un APP_KEY generato dopo risulterebbe
+    # vuoto e sovrascriverebbe quello scritto in .env.
+    environment:
+      APP_URL: http://localhost:8000
+      PHP_CLI_SERVER_WORKERS: "4"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+    tty: true
+    stdin_open: true
+
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    volumes:
+      - db-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_change_me}
+      MYSQL_DATABASE: ${DB_DATABASE:-book_translation}
+      MYSQL_USER: ${DB_USERNAME:-book_translation}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change_me}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Esposta solo su loopback per connessioni da tool esterni (DBeaver, TablePlus…).
+    ports:
+      - "127.0.0.1:${DB_EXTERNAL_PORT:-3307}:3306"
+
+volumes:
+  db-data:

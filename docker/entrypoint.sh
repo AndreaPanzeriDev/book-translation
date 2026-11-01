@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd /var/www/html
+
+export PHP_CLI_SERVER_WORKERS="${PHP_CLI_SERVER_WORKERS:-4}"
+export COMPOSER_HOME="${COMPOSER_HOME:-/home/app/.composer}"
+export npm_config_cache="${npm_config_cache:-/home/app/.npm}"
+
+if [ ! -f .env ]; then
+    cp .env.example .env
+fi
+
+if ! grep -q '^APP_KEY=base64:' .env; then
+    php artisan key:generate --force --no-interaction
+fi
+
+mkdir -p database storage/framework/cache storage/framework/sessions storage/framework/views storage/logs storage/app/public storage/app/private/books
+touch database/database.sqlite
+
+if [ ! -f vendor/autoload.php ]; then
+    composer install --no-interaction --prefer-dist
+fi
+
+if [ ! -x node_modules/.bin/vite ]; then
+    npm install
+fi
+
+php artisan migrate --force --no-interaction
+php artisan storage:link >/dev/null 2>&1 || true
+
+rm -f public/hot
+npm run dev -- --host 0.0.0.0 --port 5173 &
+VITE_PID=$!
+
+# Attende che Vite abbia scritto public/hot prima di avviare Laravel.
+for _ in $(seq 1 100); do
+    if [ -f public/hot ]; then
+        break
+    fi
+    sleep 0.2
+done
+
+php artisan serve --host=0.0.0.0 --port=8000 --no-reload &
+PHP_PID=$!
+
+cleanup() {
+    kill "${VITE_PID}" "${PHP_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+wait -n "${VITE_PID}" "${PHP_PID}"
