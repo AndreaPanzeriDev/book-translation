@@ -32,12 +32,32 @@ class AiAccountController extends Controller
     {
         $data = $this->validated($request);
         $data['is_active'] = $request->boolean('is_active', true);
+        $data['request_mode'] ??= AiAccount::REQUEST_MODE_SERIAL;
 
         $account = AiAccount::create($data);
 
+        try {
+            $count = $this->importModels($account);
+        } catch (TranslationException $e) {
+            return back()->with(
+                'error',
+                'Account “'.$account->name.'” creato, ma non è stato possibile importare i modelli: '
+                .$e->getMessage()
+                .' Potrai riprovare con “Sincronizza modelli”.'
+            );
+        }
+
+        if ($count === 0) {
+            return back()->with(
+                'success',
+                'Account “'.$account->name.'” creato. Il provider non ha restituito modelli: potrai sincronizzarli manualmente.'
+            );
+        }
+
         return back()->with(
             'success',
-            'Account “'.$account->name.'” creato. Sincronizza i modelli per iniziare.'
+            'Account “'.$account->name.'” creato: '
+            .($count === 1 ? '1 modello importato.' : $count.' modelli importati.')
         );
     }
 
@@ -66,27 +86,16 @@ class AiAccountController extends Controller
     public function syncModels(AiAccount $account): RedirectResponse
     {
         try {
-            $models = $this->client->fetchModels($account);
+            $count = $this->importModels($account);
         } catch (TranslationException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        foreach ($models as $modelId) {
-            AiModel::updateOrCreate(
-                ['ai_account_id' => $account->id, 'model_id' => $modelId],
-                ['fetched_at' => now()],
-            );
-        }
-
-        if ($models !== []) {
-            $account->models()->whereNotIn('model_id', $models)->delete();
-        }
-
         return back()->with(
             'success',
-            count($models) === 1
+            $count === 1
                 ? '1 modello sincronizzato.'
-                : count($models).' modelli sincronizzati.'
+                : $count.' modelli sincronizzati.'
         );
     }
 
@@ -105,6 +114,28 @@ class AiAccountController extends Controller
     }
 
     /**
+     * Importa i modelli esposti dal provider, aggiornando quelli esistenti e
+     * rimuovendo quelli non più disponibili.
+     */
+    private function importModels(AiAccount $account): int
+    {
+        $models = $this->client->fetchModels($account);
+
+        foreach ($models as $modelId) {
+            AiModel::updateOrCreate(
+                ['ai_account_id' => $account->id, 'model_id' => $modelId],
+                ['fetched_at' => now()],
+            );
+        }
+
+        if ($models !== []) {
+            $account->models()->whereNotIn('model_id', $models)->delete();
+        }
+
+        return count($models);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function validated(Request $request): array
@@ -116,11 +147,13 @@ class AiAccountController extends Controller
             'api_key' => ['nullable', 'string', 'max:2000'],
             'default_model' => ['nullable', 'string', 'max:190'],
             'is_active' => ['nullable', 'boolean'],
+            'request_mode' => ['nullable', 'string', 'in:serial,parallel'],
         ], [
             'name.required' => 'Il nome dell’account è obbligatorio.',
             'base_url.required' => 'L’URL di base è obbligatorio.',
             'base_url.url' => 'L’URL di base non è valido.',
             'provider.in' => 'Provider non riconosciuto.',
+            'request_mode.in' => 'Modalità richieste non riconosciuta.',
         ]);
     }
 }

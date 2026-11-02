@@ -2,13 +2,14 @@ import {
     ArrowLeftOutlined,
     CloseOutlined,
     LeftOutlined,
+    OrderedListOutlined,
     RightOutlined,
     StopOutlined,
     ThunderboltOutlined,
     TranslationOutlined,
 } from '@ant-design/icons';
 import { Link, router } from '@inertiajs/react';
-import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Progress, Select, Spin, Switch, Tag, Tooltip } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Modal, Progress, Select, Spin, Switch, Tag, Tooltip } from 'antd';
 import axios from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -22,6 +23,7 @@ import type {
     ChapterSummary,
     PageDetail,
     PageIndexItem,
+    RequestMode,
     Translation,
 } from '@/types';
 
@@ -214,6 +216,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
     const [slotA, setSlotA] = useState<Slot>(() => defaultSlot(accounts));
     const [slotB, setSlotB] = useState<Slot>(() => defaultSlot(accounts, slotA.accountId));
     const [batch, setBatch] = useState<BatchState | null>(null);
+    const [failedDetail, setFailedDetail] = useState<BatchFailure | null>(null);
     const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
 
     const cancelRef = useRef(false);
@@ -563,6 +566,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         }
 
         cancelRef.current = false;
+        setFailedDetail(null);
         const controller = new AbortController();
         abortRef.current = controller;
 
@@ -1158,7 +1162,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
             </div>
 
             {batch && (
-                <div className="fixed bottom-4 right-4 z-40 w-[calc(100%-2rem)] max-w-sm rounded-xl border border-parchment-200 bg-white p-4 shadow-2xl">
+                <div className="fixed bottom-4 right-4 z-40 w-[calc(100%-2rem)] max-w-md rounded-xl border border-parchment-200 bg-white p-4 shadow-2xl">
                     <div className="mb-2 flex items-center justify-between gap-2">
                         <strong className="text-sm text-ink-900">
                             {batch.running
@@ -1203,15 +1207,19 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     )}
 
                     {batch.failed.length > 0 && (
-                        <div className="mt-2 max-h-24 space-y-1 overflow-y-auto rounded-md bg-red-50 p-2 text-[11px] text-red-700">
-                            {batch.failed.slice(0, 4).map((failure, index) => (
-                                <p key={`${failure.pageId}-${failure.slotKey}-${index}`} className="truncate">
-                                    {failure.label}: {failure.message}
-                                </p>
+                        <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md bg-red-50 p-2 text-[11px] text-red-700">
+                            {batch.failed.map((failure, index) => (
+                                <button
+                                    key={`${failure.pageId}-${failure.slotKey}-${index}`}
+                                    type="button"
+                                    className="block w-full cursor-pointer truncate text-left hover:underline"
+                                    title="Clicca per vedere l’errore completo"
+                                    onClick={() => setFailedDetail(failure)}
+                                >
+                                    <span className="font-medium">{failure.label}:</span>{' '}
+                                    {failure.message}
+                                </button>
                             ))}
-                            {batch.failed.length > 4 && (
-                                <p>…e altre {batch.failed.length - 4} richieste.</p>
-                            )}
                         </div>
                     )}
 
@@ -1243,6 +1251,37 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     </div>
                 </div>
             )}
+
+            <Modal
+                title={failedDetail?.label ?? 'Dettaglio errore'}
+                open={failedDetail !== null}
+                onCancel={() => setFailedDetail(null)}
+                footer={[
+                    <Button
+                        key="copy"
+                        onClick={() => {
+                            if (!failedDetail) {
+                                return;
+                            }
+
+                            navigator.clipboard
+                                .writeText(failedDetail.message)
+                                .then(() => message.success('Errore copiato negli appunti.'))
+                                .catch(() => message.error('Impossibile copiare l’errore.'));
+                        }}
+                    >
+                        Copia
+                    </Button>,
+                    <Button key="close" type="primary" onClick={() => setFailedDetail(null)}>
+                        Chiudi
+                    </Button>,
+                ]}
+                width={640}
+            >
+                <p className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-red-50 p-3 font-mono text-xs text-red-700">
+                    {failedDetail?.message}
+                </p>
+            </Modal>
         </AppLayout>
     );
 }

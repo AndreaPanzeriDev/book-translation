@@ -3,6 +3,7 @@
 namespace App\Services\Translation;
 
 use App\Models\AiAccount;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
@@ -58,10 +59,17 @@ class OpenAiCompatibleClient
      */
     public function fetchModels(AiAccount $account): array
     {
-        $response = Http::withHeaders($this->headers($account))
-            ->connectTimeout(10)
-            ->timeout(30)
-            ->get($this->modelsEndpoint($account->base_url));
+        try {
+            $response = Http::withHeaders($this->headers($account))
+                ->connectTimeout(10)
+                ->timeout(30)
+                ->get($this->modelsEndpoint($account->base_url));
+        } catch (ConnectionException $e) {
+            throw new TranslationException(
+                'Impossibile contattare il provider: '.$e->getMessage(),
+                previous: $e,
+            );
+        }
 
         if ($response->failed()) {
             throw new TranslationException(

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AiAccount;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -18,6 +19,8 @@ function accountPayload(array $overrides = []): array
 }
 
 it('crea un account cifrando la chiave API', function () {
+    Http::fake();
+
     $this->post('/accounts', accountPayload())->assertRedirect();
 
     $account = AiAccount::firstOrFail();
@@ -26,6 +29,52 @@ it('crea un account cifrando la chiave API', function () {
     expect($rawKey)->not->toBe('super-secret-key')
         ->and($account->api_key)->toBe('super-secret-key')
         ->and($account->has_api_key)->toBeTrue();
+});
+
+it('importa automaticamente i modelli alla creazione dell’account', function () {
+    Http::fake([
+        'https://api.example.com/v1/models' => Http::response([
+            'data' => [
+                ['id' => 'modello-b'],
+                ['id' => 'modello-a'],
+            ],
+        ]),
+    ]);
+
+    $this->post('/accounts', accountPayload())
+        ->assertRedirect()
+        ->assertSessionHas('success', 'Account “OpenAI principale” creato: 2 modelli importati.');
+
+    $account = AiAccount::firstOrFail();
+
+    expect($account->models()->orderBy('model_id')->pluck('model_id')->all())
+        ->toBe(['modello-a', 'modello-b']);
+});
+
+it('crea comunque l’account se il provider non restituisce i modelli', function () {
+    Http::fake([
+        'https://api.example.com/v1/models' => Http::response('errore', 500),
+    ]);
+
+    $this->post('/accounts', accountPayload())
+        ->assertRedirect()
+        ->assertSessionHas('error');
+
+    expect(AiAccount::count())->toBe(1)
+        ->and(AiAccount::firstOrFail()->models()->count())->toBe(0);
+});
+
+it('crea comunque l’account se il provider non è raggiungibile', function () {
+    Http::fake(fn () => throw new ConnectionException('Connection refused'));
+
+    $this->post('/accounts', accountPayload())
+        ->assertRedirect()
+        ->assertSessionHas(
+            'error',
+            fn (string $message) => str_contains($message, 'Impossibile contattare il provider'),
+        );
+
+    expect(AiAccount::count())->toBe(1);
 });
 
 it('non espone mai la chiave API nella pagina account', function () {

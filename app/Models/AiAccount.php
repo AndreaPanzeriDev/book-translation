@@ -7,6 +7,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AiAccount extends Model
 {
+    public const REQUEST_MODE_SERIAL = 'serial';
+
+    public const REQUEST_MODE_PARALLEL = 'parallel';
+
     protected $fillable = [
         'name',
         'provider',
@@ -15,6 +19,7 @@ class AiAccount extends Model
         'default_model',
         'extra_headers',
         'is_active',
+        'request_mode',
     ];
 
     protected $hidden = [
@@ -41,6 +46,11 @@ class AiAccount extends Model
         return filled($this->api_key);
     }
 
+    public function isParallel(): bool
+    {
+        return $this->request_mode === self::REQUEST_MODE_PARALLEL;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -53,6 +63,7 @@ class AiAccount extends Model
             'base_url' => $this->base_url,
             'default_model' => $this->default_model,
             'is_active' => (bool) $this->is_active,
+            'request_mode' => $this->request_mode ?? self::REQUEST_MODE_SERIAL,
             'has_api_key' => $this->has_api_key,
             'models' => $this->relationLoaded('models')
                 ? $this->models->map(fn (AiModel $model) => [

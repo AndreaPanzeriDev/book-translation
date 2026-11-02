@@ -74,7 +74,7 @@ Aprire **Account AI → Nuovo account**.
 | Ollama (locale) | `http://host.docker.internal:11434/v1` | non necessaria |
 | Compatibile OpenAI | qualsiasi URL che esponga `/v1/chat/completions` | dipende dal server |
 
-Dopo il salvataggio usare **Sincronizza modelli** per importare l'elenco dei modelli disponibili. I modelli possono anche essere digitati manualmente nello studio, senza sincronizzazione.
+Alla creazione l'elenco dei modelli viene importato automaticamente. Usare **Sincronizza modelli** per aggiornarlo in seguito; i modelli possono anche essere digitati manualmente nello studio, senza sincronizzazione.
 
 Le chiavi API sono cifrate con la `APP_KEY` di Laravel e non vengono mai inviate al browser. In modifica, lasciare vuoto il campo chiave per mantenere quella esistente.
 

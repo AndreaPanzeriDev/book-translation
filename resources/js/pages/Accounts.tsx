@@ -4,16 +4,18 @@ import {
     DeleteOutlined,
     EditOutlined,
     KeyOutlined,
+    OrderedListOutlined,
     PlusOutlined,
     ReloadOutlined,
+    ThunderboltOutlined,
 } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
-import { Alert, Button, Form, Input, Modal, Popconfirm, Select, Switch, Tag, Tooltip } from 'antd';
+import { Alert, Button, Form, Input, Modal, Popconfirm, Radio, Select, Switch, Tag, Tooltip } from 'antd';
 import { useState } from 'react';
 
 import AppLayout from '@/layouts/AppLayout';
 import { PROVIDER_PRESETS, providerLabel } from '@/lib/languages';
-import type { AiAccount } from '@/types';
+import type { AiAccount, RequestMode } from '@/types';
 
 interface Props {
     accounts: AiAccount[];
@@ -25,9 +27,15 @@ interface FormValues {
     base_url: string;
     api_key?: string;
     default_model?: string;
+    request_mode: RequestMode;
     is_active: boolean;
     [key: string]: string | boolean | undefined;
 }
+
+const REQUEST_MODE_LABELS: Record<RequestMode, string> = {
+    serial: 'In serie',
+    parallel: 'In parallelo',
+};
 
 export default function Accounts({ accounts }: Props) {
     const [form] = Form.useForm<FormValues>();
@@ -42,6 +50,7 @@ export default function Accounts({ accounts }: Props) {
         form.setFieldsValue({
             provider: 'openai',
             base_url: PROVIDER_PRESETS[0].baseUrl,
+            request_mode: 'serial',
             is_active: true,
         });
         setOpen(true);
@@ -56,6 +65,7 @@ export default function Accounts({ accounts }: Props) {
             base_url: account.base_url,
             api_key: '',
             default_model: account.default_model ?? '',
+            request_mode: account.request_mode,
             is_active: account.is_active,
         });
         setOpen(true);
@@ -128,7 +138,7 @@ export default function Accounts({ accounts }: Props) {
                 type="info"
                 showIcon
                 title={`${activeCount} ${activeCount === 1 ? 'account attivo' : 'account attivi'} · ${accounts.length} ${accounts.length === 1 ? 'configurato' : 'configurati'}`}
-                description="Le chiavi API vengono cifrate con la chiave dell’applicazione e non vengono mai inviate al browser. Dopo aver salvato un account, usa “Sincronizza modelli” per caricare l’elenco disponibile."
+                description="Le chiavi API vengono cifrate con la chiave dell’applicazione e non vengono mai inviate al browser. Alla creazione l’elenco dei modelli viene importato automaticamente; usa “Sincronizza modelli” per aggiornarlo in seguito. Ogni account può tradurre le pagine in serie o in parallelo."
             />
 
             {accounts.length === 0 ? (
@@ -172,6 +182,18 @@ export default function Accounts({ accounts }: Props) {
                                                 <Tag color={account.is_active ? 'green' : 'default'}>
                                                     {account.is_active ? 'Attivo' : 'Disattivato'}
                                                 </Tag>
+                                                <Tag
+                                                    color={account.request_mode === 'parallel' ? 'blue' : 'default'}
+                                                    icon={
+                                                        account.request_mode === 'parallel' ? (
+                                                            <ThunderboltOutlined />
+                                                        ) : (
+                                                            <OrderedListOutlined />
+                                                        )
+                                                    }
+                                                >
+                                                    {REQUEST_MODE_LABELS[account.request_mode]}
+                                                </Tag>
                                                 {account.has_api_key ? (
                                                     <Tag icon={<KeyOutlined />} color="gold">
                                                         Chiave salvata
@@ -210,8 +232,8 @@ export default function Accounts({ accounts }: Props) {
                                     </div>
                                     {account.models.length === 0 ? (
                                         <p className="rounded-md bg-parchment-100/70 px-2.5 py-2 text-xs text-ink-500">
-                                            Nessun modello sincronizzato. Puoi comunque digitare un
-                                            modello nello studio.
+                                            Nessun modello importato. Usa “Sincronizza modelli” oppure
+                                            digita un modello nello studio.
                                         </p>
                                     ) : (
                                         <div className="flex flex-wrap gap-1">
@@ -353,6 +375,17 @@ export default function Accounts({ accounts }: Props) {
 
                     <Form.Item name="default_model" label="Modello predefinito">
                         <Input placeholder="Es. gpt-4o-mini, openai/gpt-4o-mini, llama3.1:8b" />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="request_mode"
+                        label="Modalità richieste"
+                        extra="Vale quando traduci più pagine insieme: in serie una richiesta alla volta, in parallelo tutte le pagine selezionate insieme. Con due colonne ogni account segue la propria modalità."
+                    >
+                        <Radio.Group>
+                            <Radio value="serial">In serie</Radio>
+                            <Radio value="parallel">In parallelo</Radio>
+                        </Radio.Group>
                     </Form.Item>
 
                     <Form.Item name="is_active" label="Account attivo" valuePropName="checked">

@@ -47,6 +47,8 @@ export interface AiModel {
     context_length: number | null;
 }
 
+export type RequestMode = 'serial' | 'parallel';
+
 export interface AiAccount {
     id: number;
     name: string;
@@ -54,6 +56,7 @@ export interface AiAccount {
     base_url: string;
     default_model: string | null;
     is_active: boolean;
+    request_mode: RequestMode;
     has_api_key: boolean;
     models: AiModel[];
 }
