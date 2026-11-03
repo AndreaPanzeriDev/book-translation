@@ -65,7 +65,7 @@ export default function Accounts({ accounts }: Props) {
             base_url: account.base_url,
             api_key: '',
             default_model: account.default_model ?? '',
-            request_mode: account.request_mode,
+            request_mode: account.request_mode ?? 'serial',
             is_active: account.is_active,
         });
         setOpen(true);
@@ -192,7 +192,9 @@ export default function Accounts({ accounts }: Props) {
                                                         )
                                                     }
                                                 >
-                                                    {REQUEST_MODE_LABELS[account.request_mode]}
+                                                    {account.request_mode === 'parallel'
+                                                        ? REQUEST_MODE_LABELS.parallel
+                                                        : REQUEST_MODE_LABELS.serial}
                                                 </Tag>
                                                 {account.has_api_key ? (
                                                     <Tag icon={<KeyOutlined />} color="gold">
@@ -380,7 +382,7 @@ export default function Accounts({ accounts }: Props) {
                     <Form.Item
                         name="request_mode"
                         label="Modalità richieste"
-                        extra="Vale quando traduci più pagine insieme: in serie una richiesta alla volta, in parallelo tutte le pagine selezionate insieme. Con due colonne ogni account segue la propria modalità."
+                        extra="Vale quando traduci più pagine insieme: in serie una richiesta alla volta, in parallelo tutte le pagine selezionate insieme. Con due colonne ogni account segue la propria modalità. In parallelo il provider può applicare limiti di frequenza."
                     >
                         <Radio.Group>
                             <Radio value="serial">In serie</Radio>

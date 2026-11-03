@@ -12,7 +12,7 @@ Lo stack è **Laravel 13 + Inertia 3 + React 19 + TypeScript + Tailwind CSS 4 + 
 - Confronto originale + 1 traduzione oppure originale + 2 traduzioni (massimo tre colonne).
 - Ogni colonna di traduzione sceglie autonomamente account e modello.
 - Più account contemporanei: OpenAI, OpenRouter, Ollama locale o qualsiasi endpoint compatibile OpenAI.
-- Traduzione in batch con concorrenza 2, avanzamento nel tab, interruzione e riprova degli errori.
+- Traduzione in batch con modalità per account: in serie (una richiesta alla volta) o in parallelo (tutte le pagine selezionate insieme), con avanzamento nel tab, interruzione e riprova degli errori.
 - Cache delle traduzioni per pagina, hash del testo, account, modello, lingua e versione del prompt: cambiare colonna è istantaneo quando la traduzione esiste già.
 - Allineamento a livello di frase: selezionando una o più frasi nell'originale, le frasi corrispondenti si evidenziano automaticamente in tutte le traduzioni visibili, anche quelle già in cache.
 - Chiavi API cifrate nel database e mai serializzate verso il browser.
@@ -74,7 +74,14 @@ Aprire **Account AI → Nuovo account**.
 | Ollama (locale) | `http://host.docker.internal:11434/v1` | non necessaria |
 | Compatibile OpenAI | qualsiasi URL che esponga `/v1/chat/completions` | dipende dal server |
 
-Alla creazione l'elenco dei modelli viene importato automaticamente. Usare **Sincronizza modelli** per aggiornarlo in seguito; i modelli possono anche essere digitati manualmente nello studio, senza sincronizzazione.
+Alla creazione l’elenco dei modelli viene importato automaticamente. Usare **Sincronizza modelli** per aggiornarlo in seguito; i modelli possono anche essere digitati manualmente nello studio, senza sincronizzazione.
+
+Ogni account ha una **Modalità richieste**:
+
+- **In serie** (predefinita) — quando si traduce una selezione, le pagine vengono inviate una alla volta; la successiva parte solo quando la precedente è terminata.
+- **In parallelo** — tutte le pagine selezionate vengono inviate contemporaneamente, con una richiesta separata per pagina. Con due colonne di traduzione, ogni account segue la propria modalità in modo indipendente.
+
+In parallelo l’app non impone un limite proprio, ma restano i limiti dell’ambiente: il browser apre al massimo circa 6 connessioni per host e `php artisan serve` usa `PHP_CLI_SERVER_WORKERS=4`. Con 4 pagine si ottengono 4 richieste contemporanee; per selezioni più grandi le richieste in eccesso vengono messe in coda dall’infrastruttura. Per aumentare il parallelismo reale si può alzare `PHP_CLI_SERVER_WORKERS` in `compose.yaml` (a costo di maggiore memoria).
 
 Le chiavi API sono cifrate con la `APP_KEY` di Laravel e non vengono mai inviate al browser. In modifica, lasciare vuoto il campo chiave per mantenere quella esistente.
 
@@ -121,8 +128,8 @@ Verificare la connessione con **Account AI → Verifica**. Se compare un errore 
    - **Seleziona capitolo** per il capitolo attivo;
    - **Tutto il libro** per l'intero volume.
 4. Scegliere account e modello per **Traduzione 1**. Attivare **Confronta due traduzioni** per aggiungere una seconda colonna indipendente.
-5. Premere **Traduci selezione** oppure **Traduci** nella singola pagina.
-6. Seguire l'avanzamento nel pannello in basso a destra: mostra richieste elaborate, riuscite, errori, richiesta in corso e permette di interrompere o riprovare i fallimenti.
+5. Premere **Traduci selezione** oppure **Traduci** nella singola pagina. La modalità serie/parallela dell’account decide se le pagine selezionate partono una alla volta o tutte insieme.
+6. Seguire l’avanzamento nel pannello in basso a destra: mostra richieste elaborate, riuscite, errori, richieste in corso e permette di interrompere o riprovare i fallimenti.
 7. Le traduzioni già ottenute vengono mostrate con il tag `cache` e non vengono richieste di nuovo.
 8. Selezionare una frase nell'originale: la traduzione corrispondente viene evidenziata automaticamente in ogni colonna visibile.
 
@@ -133,6 +140,7 @@ L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione 
 - **Importazione** — `EpubParser` legge `container.xml`, il package OPF, l'indice EPUB 3 (`nav`) o EPUB 2 (`NCX`), estrae titolo, autore, lingua, copertina e blocchi di testo. `BookImporter` crea libro, capitoli, pagine virtuali e blocchi in una transazione.
 - **Pagine virtuali** — i blocchi vengono accumulati fino al limite di caratteri configurato (1.500 per impostazione predefinita). I blocchi più lunghi vengono divisi rispettando gli spazi.
 - **Traduzione** — `TranslationService` costruisce un prompt numerato, richiede al modello un JSON con gli stessi segmenti e valida che il numero di segmenti restituiti coincida con quello inviato. La risposta viene salvata come elenco di `{ block_id, text }`.
+- **Batch** — il frontend raggruppa le pagine per account e applica la modalità scelta: in serie attende ogni risposta prima di inviare la successiva, in parallelo invia insieme tutte le richieste del gruppo. Account diversi procedono in modo indipendente.
 - **Cache** — la chiave è calcolata da pagina, hash del testo sorgente, account, modello, lingua di destinazione, versione del prompt e parametri. Una traduzione completata viene riusata; una fallita può essere ritentata.
 - **Allineamento** — il frontend divide blocchi originali e tradotti in frasi con `Intl.Segmenter`, mappa la selezione del browser alle frasi di origine e allinea le frasi tradotte per lunghezza e punteggiatura. Se il numero di frasi coincide, usa l'allineamento 1:1; altrimenti risolve casi 1:2, 2:1 e frasi mancanti.
 - **Provider** — `OpenAiCompatibleClient` usa l'endpoint `/chat/completions` e `/models` dell'API OpenAI. Funziona con OpenAI, OpenRouter, Ollama e server compatibili.
@@ -170,14 +178,14 @@ La suite Pest copre:
 - importazione, chunking delle pagine e libreria;
 - selezione e restituzione delle pagine con traduzioni;
 - traduzione, cache, errori del provider, JSON in code fence e segmenti mancanti;
-- creazione e aggiornamento account, cifratura della chiave, sincronizzazione modelli e cancellazione;
+- creazione e aggiornamento account, cifratura della chiave, modalità richieste, sincronizzazione modelli e cancellazione;
 - validazione dei capitoli appartenenti al libro.
 
 ```bash
 make test
 ```
 
-Stato attuale: **18 test, 106 asserzioni**.
+Stato attuale: **26 test, 139 asserzioni**.
 
 ## Privacy e sicurezza
 

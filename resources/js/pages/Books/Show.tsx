@@ -62,7 +62,8 @@ interface BatchState {
     succeeded: number;
     failed: BatchFailure[];
     currentLabel: string | null;
-    currentPageId: number | null;
+    inFlight: number;
+    activePageIds: number[];
 }
 
 function defaultModelFor(account: AiAccount | undefined): string {
@@ -140,6 +141,19 @@ function characterOffset(element: HTMLElement, node: Node, offset: number): numb
     return range.toString().length;
 }
 
+function RequestModeTag({ mode }: { mode: RequestMode }) {
+    const parallel = mode === 'parallel';
+
+    return (
+        <Tag
+            color={parallel ? 'blue' : 'default'}
+            icon={parallel ? <ThunderboltOutlined /> : <OrderedListOutlined />}
+        >
+            {parallel ? 'Parallelo' : 'Serie'}
+        </Tag>
+    );
+}
+
 function SlotPicker({
     label,
     slot,
@@ -165,7 +179,12 @@ function SlotPicker({
         <div className="rounded-lg border border-parchment-200 bg-white p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">{label}</span>
-                {account && <Tag>{providerLabel(account.provider)}</Tag>}
+                {account && (
+                    <div className="flex flex-wrap items-center gap-1">
+                        <Tag>{providerLabel(account.provider)}</Tag>
+                        <RequestModeTag mode={account.request_mode} />
+                    </div>
+                )}
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
                 <Select
@@ -261,6 +280,27 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
     };
 
     const slotsReady = activeSlots.every(({ slot }) => slotIsReady(slot));
+
+    const requestModeSummary = useMemo(() => {
+        const modes = new Set(
+            activeSlots
+                .map(
+                    ({ slot }) =>
+                        accounts.find((account) => account.id === slot.accountId)?.request_mode,
+                )
+                .filter((mode): mode is RequestMode => mode !== undefined),
+        );
+
+        if (modes.size === 1 && modes.has('parallel')) {
+            return 'Modalità parallela: tutte le pagine selezionate partono insieme.';
+        }
+
+        if (modes.size === 1 && modes.has('serial')) {
+            return 'Modalità in serie: una richiesta alla volta per account.';
+        }
+
+        return 'Modalità per account: serie o parallelo secondo la configurazione del provider.';
+    }, [activeSlots, accounts]);
 
     const findTranslation = (pageId: number, slot: Slot): Translation | undefined => {
         if (!slot.accountId || !slot.model) {
@@ -578,76 +618,124 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
             succeeded: 0,
             failed: [],
             currentLabel: null,
-            currentPageId: null,
+            inFlight: 0,
+            activePageIds: [],
         });
 
-        let cursor = 0;
         let processed = 0;
         let succeeded = 0;
         const failed: BatchFailure[] = [];
+        const inFlightByPage = new Map<number, number>();
+        const inFlightLabels = new Map<string, string>();
 
-        const worker = async () => {
-            while (!cancelRef.current) {
-                const index = cursor;
-                cursor += 1;
+        const syncProgress = () => {
+            const activePageIds = Array.from(inFlightByPage.keys());
+            const inFlight = Array.from(inFlightByPage.values()).reduce(
+                (total, count) => total + count,
+                0,
+            );
 
-                if (index >= items.length) {
+            setBatch((previous) =>
+                previous
+                    ? {
+                          ...previous,
+                          processed,
+                          succeeded,
+                          failed: [...failed],
+                          inFlight,
+                          activePageIds,
+                          currentLabel:
+                              inFlight === 1
+                                  ? (Array.from(inFlightLabels.values())[0] ?? null)
+                                  : null,
+                      }
+                    : previous,
+            );
+        };
+
+        const processItem = async (item: QueueItem) => {
+            if (cancelRef.current) {
+                return;
+            }
+
+            const label = `Pagina ${item.pagePosition} · ${item.model}`;
+            const itemKey = `${item.pageId}:${item.slotKey}:${item.accountId}:${item.model}`;
+
+            inFlightByPage.set(item.pageId, (inFlightByPage.get(item.pageId) ?? 0) + 1);
+            inFlightLabels.set(itemKey, label);
+            syncProgress();
+
+            let finished = false;
+
+            try {
+                const { data } = await axios.post<{ translation: Translation }>(
+                    `/books/${book.id}/translations`,
+                    {
+                        page_id: item.pageId,
+                        account_id: item.accountId,
+                        model: item.model,
+                        target_language: targetLanguage,
+                    },
+                    { signal: controller.signal },
+                );
+
+                addTranslation(data.translation);
+                succeeded += 1;
+                finished = true;
+            } catch (error) {
+                if (axios.isCancel(error)) {
                     return;
                 }
 
-                const item = items[index];
-                const label = `Pagina ${item.pagePosition} · ${item.model}`;
+                failed.push({ ...item, label, message: errorMessage(error) });
+                finished = true;
+            } finally {
+                inFlightLabels.delete(itemKey);
+                const remaining = (inFlightByPage.get(item.pageId) ?? 1) - 1;
 
-                setBatch((previous) =>
-                    previous
-                        ? { ...previous, currentLabel: label, currentPageId: item.pageId }
-                        : previous,
-                );
-
-                let finished = false;
-
-                try {
-                    const { data } = await axios.post<{ translation: Translation }>(
-                        `/books/${book.id}/translations`,
-                        {
-                            page_id: item.pageId,
-                            account_id: item.accountId,
-                            model: item.model,
-                            target_language: targetLanguage,
-                        },
-                        { signal: controller.signal },
-                    );
-
-                    addTranslation(data.translation);
-                    succeeded += 1;
-                    finished = true;
-                } catch (error) {
-                    if (axios.isCancel(error)) {
-                        return;
-                    }
-
-                    failed.push({ ...item, label, message: errorMessage(error) });
-                    finished = true;
-                } finally {
-                    if (finished) {
-                        processed += 1;
-
-                        setBatch((previous) =>
-                            previous
-                                ? {
-                                      ...previous,
-                                      processed,
-                                      succeeded,
-                                      failed: [...failed],
-                                  }
-                                : previous,
-                        );
-                    }
+                if (remaining <= 0) {
+                    inFlightByPage.delete(item.pageId);
+                } else {
+                    inFlightByPage.set(item.pageId, remaining);
                 }
+
+                if (finished) {
+                    processed += 1;
+                }
+
+                syncProgress();
             }
         };
 
-        await Promise.all(Array.from({ length: Math.min(2, items.length) }, () => worker()));
+        const groups = new Map<number, QueueItem[]>();
+
+        for (const item of items) {
+            const group = groups.get(item.accountId) ?? [];
+            group.push(item);
+            groups.set(item.accountId, group);
+        }
+
+        const runGroup = async (accountId: number, group: QueueItem[]) => {
+            const mode =
+                accounts.find((account) => account.id === accountId)?.request_mode ?? 'serial';
+
+            if (mode === 'parallel') {
+                await Promise.all(group.map((item) => processItem(item)));
+                return;
+            }
+
+            for (const item of group) {
+                if (cancelRef.current) {
+                    return;
+                }
+
+                await processItem(item);
+            }
+        };
+
+        await Promise.all(
+            Array.from(groups.entries()).map(([accountId, group]) => runGroup(accountId, group)),
+        );
 
         if (abortRef.current === controller) {
             abortRef.current = null;
@@ -662,7 +750,8 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                       running: false,
                       cancelled,
                       currentLabel: null,
-                      currentPageId: null,
+                      inFlight: 0,
+                      activePageIds: [],
                       processed,
                       succeeded,
                       failed: [...failed],
@@ -902,7 +991,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                             Traduci selezione
                         </Button>
                         <p className="mt-2 text-[11px] leading-snug text-ink-500">
-                            Concorrenza 2 · le traduzioni già in cache vengono saltate
+                            {requestModeSummary} Le traduzioni già in cache vengono saltate
                             automaticamente.
                         </p>
                     </div>
@@ -1012,7 +1101,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                             </div>
 
                                             <div className="flex items-center gap-2">
-                                                {batch?.running && batch.currentPageId === info.id && (
+                                                {batch?.running && batch.activePageIds.includes(info.id) && (
                                                     <Spin size="small" />
                                                 )}
                                                 <Button
@@ -1202,8 +1291,12 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                         </span>
                     </div>
 
-                    {batch.currentLabel && (
-                        <p className="mt-2 truncate text-xs text-ink-700">In corso: {batch.currentLabel}</p>
+                    {batch.inFlight > 0 && (
+                        <p className="mt-2 truncate text-xs text-ink-700">
+                            {batch.inFlight === 1 && batch.currentLabel
+                                ? `In corso: ${batch.currentLabel}`
+                                : `${batch.inFlight} richieste in corso`}
+                        </p>
                     )}
 
                     {batch.failed.length > 0 && (

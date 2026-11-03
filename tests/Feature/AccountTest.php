@@ -31,6 +31,51 @@ it('crea un account cifrando la chiave API', function () {
         ->and($account->has_api_key)->toBeTrue();
 });
 
+it('usa la modalità in serie come default', function () {
+    Http::fake();
+
+    $this->post('/accounts', accountPayload())->assertRedirect();
+
+    expect(AiAccount::firstOrFail()->request_mode)->toBe('serial');
+});
+
+it('salva la modalità parallela e la espone al client', function () {
+    Http::fake();
+
+    $this->post('/accounts', accountPayload(['request_mode' => 'parallel']))->assertRedirect();
+
+    $account = AiAccount::firstOrFail();
+
+    expect($account->request_mode)->toBe('parallel');
+
+    $this->get('/accounts')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Accounts')
+            ->where('accounts.0.request_mode', 'parallel'));
+});
+
+it('rifiuta una modalità richieste non valida', function () {
+    Http::fake();
+
+    $this->post('/accounts', accountPayload(['request_mode' => 'random']))
+        ->assertSessionHasErrors('request_mode');
+
+    expect(AiAccount::count())->toBe(0);
+});
+
+it('aggiorna la modalità richieste di un account', function () {
+    Http::fake();
+
+    $account = AiAccount::create(accountPayload());
+
+    $this->put("/accounts/{$account->id}", accountPayload([
+        'request_mode' => 'parallel',
+    ]))->assertRedirect();
+
+    expect($account->refresh()->request_mode)->toBe('parallel');
+});
+
 it('importa automaticamente i modelli alla creazione dell’account', function () {
     Http::fake([
         'https://api.example.com/v1/models' => Http::response([
