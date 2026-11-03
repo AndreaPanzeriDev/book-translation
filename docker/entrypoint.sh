@@ -7,6 +7,12 @@ export PHP_CLI_SERVER_WORKERS="${PHP_CLI_SERVER_WORKERS:-4}"
 export COMPOSER_HOME="${COMPOSER_HOME:-/home/app/.composer}"
 export npm_config_cache="${npm_config_cache:-/home/app/.npm}"
 
+# Porte configurate in .env e passate da compose.yaml. Lo stesso numero è
+# usato dentro e fuori dal container.
+APP_PORT="${APP_PORT:-8000}"
+VITE_PORT="${VITE_PORT:-5173}"
+export APP_PORT VITE_PORT
+
 if [ ! -f .env ]; then
     cp .env.example .env
 fi
@@ -30,7 +36,7 @@ php artisan migrate --force --no-interaction
 php artisan storage:link >/dev/null 2>&1 || true
 
 rm -f public/hot
-npm run dev -- --host 0.0.0.0 --port 5173 &
+npm run dev -- --host 0.0.0.0 --port "$VITE_PORT" &
 VITE_PID=$!
 
 # Attende che Vite abbia scritto public/hot prima di avviare Laravel.
@@ -41,7 +47,7 @@ for _ in $(seq 1 100); do
     sleep 0.2
 done
 
-php artisan serve --host=0.0.0.0 --port=8000 --no-reload &
+php artisan serve --host=0.0.0.0 --port="$APP_PORT" --no-reload &
 PHP_PID=$!
 
 cleanup() {

@@ -44,12 +44,15 @@ Il primo avvio può richiedere qualche minuto (build dell'immagine + `composer i
 
 `make up` resta disponibile come alias rapido di `docker compose up -d --build` (senza le verifiche dello script).
 
-Aprire **<http://localhost:8000>**. Gli avvisi di setup, incluso l'esito dei controlli finali, sono stampati a terminale; in caso di errore lo script mostra le ultime righe dei log e termina con codice diverso da zero.
+Aprire l'URL mostrato al termine dello script (per impostazione predefinita **<http://localhost:8000>**). Gli avvisi di setup, incluso l'esito dei controlli finali, sono stampati a terminale; in caso di errore lo script mostra le ultime righe dei log e termina con codice diverso da zero.
 
-Le porte sono pubblicate esclusivamente su `127.0.0.1`:
+Le porte sono definite **solo in `.env`** e sono pubblicate esclusivamente su `127.0.0.1`:
 
-- `8000` — applicazione Laravel;
-- `5173` — server di sviluppo Vite (ricarica automatica e HMR).
+- `APP_PORT` (default `8000`) — applicazione Laravel;
+- `VITE_PORT` (default `5173`) — server di sviluppo Vite (ricarica automatica e HMR);
+- `DB_EXTERNAL_PORT` (default `3307`) — MariaDB per client esterni.
+
+Se una porta è occupata, `./setup.sh` ne propone un'altra, la salva in `.env` e la usa per tutti i servizi. Non serve modificare `compose.yaml`, `vite.config.ts` o `docker/entrypoint.sh`. Per forzare una porta diversa, modifica `APP_PORT`, `VITE_PORT` o `DB_EXTERNAL_PORT` in `.env` e rilancia `./setup.sh`: `APP_URL` viene aggiornato automaticamente.
 
 Per fermare tutto:
 
@@ -225,7 +228,7 @@ tests/                    Suite Pest e fixture EPUB
 
 ## Risoluzione dei problemi
 
-- **Pagina bianca o asset non caricati** — controllare che Vite sia attivo su `http://localhost:5173` e che `public/hot` contenga `http://localhost:5173`. L'entrypoint elimina il file a ogni avvio; se il problema persiste, riavviare con `make down && make up`.
+- **Pagina bianca o asset non caricati** — controllare che Vite sia attivo sulla porta `VITE_PORT` di `.env` (default `5173`) e che `public/hot` contenga lo stesso URL, ad esempio `http://localhost:5173`. L'entrypoint elimina il file a ogni avvio; se il problema persiste, riavviare con `make down && make up`.
 - **Errori di connessione al provider** — usare **Verifica** nella pagina account. Per Ollama controllare `OLLAMA_HOST` e la raggiungibilità della porta dal container.
 - **Modello assente dall'elenco** — sincronizzare i modelli oppure digitare l'ID manualmente nel campo della colonna.
 - **Timeout con modelli locali grandi** — il primo caricamento può superare i 300 secondi. Aumentare `AI_REQUEST_TIMEOUT` in `.env` e riavviare il container con `make down && make up`.

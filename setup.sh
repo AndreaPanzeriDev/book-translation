@@ -5,11 +5,12 @@
 # Cosa fa, in ordine:
 #   1. verifica i prerequisiti (Docker + Docker Compose v2);
 #   2. crea .env da .env.example (se manca) con password del database casuali;
-#   3. costruisce l'immagine dell'applicazione (PHP 8.5 + Node 22 + Composer);
-#   4. avvia i container app + MariaDB;
-#   5. attende che il database sia pronto e che l'entrypoint abbia installato
+#   3. verifica le porte definite in .env e, se occupate, ne propone altre;
+#   4. costruisce l'immagine dell'applicazione (PHP 8.5 + Node 22 + Composer);
+#   5. avvia i container app + MariaDB;
+#   6. attende che il database sia pronto e che l'entrypoint abbia installato
 #      dipendenze composer/npm, generato APP_KEY ed eseguito le migrazioni;
-#   6. verifica finale: migrazioni, storage link, applicazione raggiungibile.
+#   7. verifica finale: migrazioni, storage link, applicazione raggiungibile.
 #
 # Lo script è idempotente: si può rilanciare quando si vuole.
 #
@@ -19,6 +20,12 @@
 #   ./setup.sh --skip-build  # riavvia senza ricostruire l'immagine
 #   ./setup.sh --reset       # elimina container E volumi (perde il database!)
 #   ./setup.sh --help
+#
+# Le porte sono definite solo in .env:
+#   APP_PORT            porta dell'applicazione (default 8000)
+#   VITE_PORT           porta di Vite/HMR (default 5173)
+#   DB_EXTERNAL_PORT    porta di MariaDB per client esterni (default 3307)
+# Se una porta è occupata, lo script propone un'alternativa e la salva in .env.
 #
 # Variabili d'ambiente utili:
 #   DB_WAIT_TIMEOUT   secondi di attesa per il database (default 180)
@@ -47,6 +54,8 @@ DB_WAIT_TIMEOUT="${DB_WAIT_TIMEOUT:-180}"
 APP_WAIT_TIMEOUT="${APP_WAIT_TIMEOUT:-900}"
 
 TMP_FILES=()
+# Sentinella: evita l'espansione di un array vuoto con `set -u` su bash vecchi.
+CHOSEN_PORTS=(-1)
 cleanup() {
     local f
     if ((${#TMP_FILES[@]} > 0)); then
@@ -147,7 +156,138 @@ app_key() {
 }
 
 port_listening() {
-    (exec 3<>"/dev/tcp/127.0.0.1/$1") >/dev/null 2>&1
+    local port="$1"
+    if command -v ss >/dev/null 2>&1; then
+        if ss -ltn 2>/dev/null \
+            | awk -v suffix=":${port}" '$4 ~ (suffix "$") { found = 1 } END { exit(found ? 0 : 1) }'; then
+            return 0
+        fi
+    fi
+    if command -v lsof >/dev/null 2>&1; then
+        if lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    (exec 3<>"/dev/tcp/127.0.0.1/${port}") >/dev/null 2>&1
+}
+
+port_owner() {
+    # Nome del processo in ascolto, se individuabile (best effort).
+    local port="$1" name=''
+    if command -v lsof >/dev/null 2>&1; then
+        name="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN -F c 2>/dev/null | sed -n 's/^c//p' | head -n 1 || true)"
+    fi
+    if [[ -z "$name" ]] && command -v ss >/dev/null 2>&1; then
+        name="$(ss -ltnp 2>/dev/null \
+            | awk -v suffix=":${port}" '$4 ~ (suffix "$")' \
+            | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' \
+            | head -n 1 || true)"
+    fi
+    printf '%s' "$name"
+}
+
+port_used_by_project() {
+    # true se la porta è pubblicata da un container di questo progetto.
+    local port="$1" ports
+    ports="$(docker compose ps --format '{{.Ports}}' 2>/dev/null || true)"
+    [[ "$ports" == *"127.0.0.1:${port}->"* ]]
+}
+
+valid_port() {
+    local port="$1"
+    [[ "$port" =~ ^[1-9][0-9]{3,4}$ ]] || return 1
+    (( port >= 1024 && port <= 65535 ))
+}
+
+port_already_chosen() {
+    local candidate="$1" chosen
+    for chosen in "${CHOSEN_PORTS[@]}"; do
+        [[ "$chosen" == "$candidate" ]] && return 0
+    done
+    return 1
+}
+
+next_free_port() {
+    local candidate="$1" i
+    for ((i = 0; i < 200; i++)); do
+        candidate=$((candidate + 1))
+        if ((candidate > 65535)); then
+            candidate=1024
+        fi
+        port_already_chosen "$candidate" && continue
+        port_listening "$candidate" && continue
+        printf '%s' "$candidate"
+        return 0
+    done
+    return 1
+}
+
+resolve_port() {
+    # resolve_port CHIAVE DEFAULT ETICHETTA
+    # Legge la porta da .env, verifica che sia libera e, se occupata, chiede
+    # (o sceglie automaticamente) un'alternativa salvandola in .env.
+    local key="$1" default="$2" label="$3"
+    local original current suggested answer owner
+
+    original="$(env_get "$key" "$default")"
+    current="$original"
+
+    if ! valid_port "$current"; then
+        warn "Valore non valido per $key in .env ('$current'): uso $default"
+        current="$default"
+    fi
+
+    while :; do
+        if port_already_chosen "$current"; then
+            warn "La porta $current ($label) è già assegnata a un altro servizio."
+        elif ! port_used_by_project "$current" && port_listening "$current"; then
+            owner="$(port_owner "$current")"
+            if [[ -n "$owner" ]]; then
+                warn "La porta $current ($label) è già occupata da: $owner"
+            else
+                warn "La porta $current ($label) è già occupata da un altro processo."
+            fi
+        else
+            break
+        fi
+
+        suggested="$(next_free_port "$current")" || die "Nessuna porta libera trovata per $label."
+
+        if [[ -t 0 ]]; then
+            while :; do
+                read -r -p "    Nuova porta per $label [$suggested] (Invio per accettare, q per uscire): " answer || answer='q'
+                answer="${answer:-$suggested}"
+                if [[ "$answer" == "q" || "$answer" == "Q" ]]; then
+                    die "Operazione annullata."
+                fi
+                if ! valid_port "$answer"; then
+                    warn "Porta non valida: usa un numero tra 1024 e 65535."
+                    continue
+                fi
+                if port_already_chosen "$answer"; then
+                    warn "La porta $answer è già assegnata a un altro servizio."
+                    continue
+                fi
+                if port_listening "$answer"; then
+                    warn "La porta $answer è occupata."
+                    continue
+                fi
+                break
+            done
+        else
+            answer="$suggested"
+            warn "Nessun terminale interattivo: uso la porta $answer per $label."
+        fi
+
+        current="$answer"
+    done
+
+    CHOSEN_PORTS+=("$current")
+    if [[ "$current" != "$original" ]]; then
+        env_set "$key" "$current"
+        ok "Porta $current per $label salvata in .env ($key)"
+    fi
+    printf -v "$key" '%s' "$current"
 }
 
 http_code() {
@@ -209,7 +349,9 @@ fi
 [[ -n "$(env_get DB_USERNAME)" ]]   || env_set DB_USERNAME book_translation
 [[ -n "$(env_get DB_PASSWORD)" ]]   || env_set DB_PASSWORD "$(rand_secret)"
 [[ -n "$(env_get DB_ROOT_PASSWORD)" ]] || env_set DB_ROOT_PASSWORD root_change_me
-[[ -n "$(env_get APP_URL)" ]]       || env_set APP_URL http://localhost:8000
+[[ -n "$(env_get APP_PORT)" ]]          || env_set APP_PORT 8000
+[[ -n "$(env_get VITE_PORT)" ]]         || env_set VITE_PORT 5173
+[[ -n "$(env_get DB_EXTERNAL_PORT)" ]]  || env_set DB_EXTERNAL_PORT 3307
 
 # APP_KEY va scritta PRIMA di avviare i container: le variabili d'ambiente
 # hanno precedenza sul file .env, quindi un key generato a container avviato
@@ -225,7 +367,6 @@ DB_CONNECTION="$(env_get DB_CONNECTION mysql)"
 DB_HOST="$(env_get DB_HOST db)"
 DB_DATABASE="$(env_get DB_DATABASE book_translation)"
 DB_USERNAME="$(env_get DB_USERNAME book_translation)"
-DB_EXTERNAL_PORT="$(env_get DB_EXTERNAL_PORT 3307)"
 
 if [[ "$DB_CONNECTION" == "mysql" || "$DB_CONNECTION" == "mariadb" ]]; then
     case "$DB_HOST" in
@@ -235,24 +376,36 @@ if [[ "$DB_CONNECTION" == "mysql" || "$DB_CONNECTION" == "mariadb" ]]; then
             ;;
     esac
 fi
-ok "Database: $DB_DATABASE su $DB_HOST:$DB_EXTERNAL_PORT (esterno)"
+ok "Database: $DB_DATABASE su $DB_HOST"
 
 chmod +x docker/entrypoint.sh 2>/dev/null || true
 
-# ----------------------------------------------------- porte già occupate ---
-step "Controllo porte 8000 e 5173"
+# ----------------------------------------------------- configurazione porte -
+step "Configurazione delle porte"
 
 if app_running; then
-    info "Lo stack risulta già in esecuzione: verrà riavviato"
-else
-    for port in 8000 5173; do
-        if port_listening "$port"; then
-            die "La porta $port è già occupata da un altro processo.
-   Fermalo (es. 'sudo ss -ltnp | grep :$port') oppure cambia le porte in compose.yaml."
-        fi
-    done
-    ok "Porte libere"
+    info "Lo stack risulta già in esecuzione: le sue porte non sono considerate un conflitto"
 fi
+
+CHOSEN_PORTS=(-1)
+resolve_port APP_PORT 8000 "applicazione Laravel"
+resolve_port VITE_PORT 5173 "Vite/HMR"
+resolve_port DB_EXTERNAL_PORT 3307 "MariaDB (accesso esterno)"
+
+# APP_URL segue APP_PORT: aggiorna solo gli URL locali. Un eventuale dominio
+# personalizzato configurato dall'utente viene lasciato intatto.
+# La forma con ${APP_PORT} è migrata dai setup precedenti.
+current_app_url="$(env_get APP_URL)"
+if [[ -z "$current_app_url" \
+    || "$current_app_url" == 'http://localhost:${APP_PORT}' \
+    || "$current_app_url" =~ ^http://(localhost|127\.0\.0\.1)(:[0-9]+)?/?$ ]]; then
+    env_set APP_URL "http://localhost:${APP_PORT}"
+fi
+
+# Esporta i valori verificati: compose usa queste porte anche se la shell
+# contiene valori diversi.
+export APP_PORT VITE_PORT DB_EXTERNAL_PORT
+ok "Applicazione: http://localhost:$APP_PORT · Vite: http://localhost:$VITE_PORT · MariaDB esterno: 127.0.0.1:$DB_EXTERNAL_PORT"
 
 # --------------------------------------------------------------- docker -----
 if [[ $RESET -eq 1 ]]; then
@@ -279,7 +432,8 @@ else
 fi
 
 step "Avvio dei container"
-docker compose up -d --remove-orphans
+docker compose up -d --remove-orphans \
+    || die "Avvio dei container fallito. Se il messaggio segnala una porta occupata, rilancia ./setup.sh: ne proporrà una libera."
 ok "Container avviati"
 
 # ------------------------------------------------------------ attesa DB -----
@@ -314,7 +468,7 @@ while (( $(date +%s) < deadline )); do
         dump_logs
         die "Il container dell'applicazione si è fermato. Vedi i log qui sopra."
     fi
-    if listening "http://127.0.0.1:8000/" 8000; then
+    if listening "http://127.0.0.1:${APP_PORT}/" "$APP_PORT"; then
         app_ready=1
         break
     fi
@@ -323,20 +477,20 @@ while (( $(date +%s) < deadline )); do
 done
 [[ $app_ready -eq 1 ]] || { printf '\n'; dump_logs; die "L'applicazione non ha risposto entro ${APP_WAIT_TIMEOUT}s."; }
 printf '\n'
-ok "Server Laravel in ascolto su http://localhost:8000"
+ok "Server Laravel in ascolto su http://localhost:${APP_PORT}"
 
 vite_ready=0
 for _ in $(seq 1 20); do
-    if [[ "$(http_code http://127.0.0.1:5173/@vite/client 5173)" == 2* ]]; then
+    if [[ "$(http_code "http://127.0.0.1:${VITE_PORT}/@vite/client" "$VITE_PORT")" == 2* ]]; then
         vite_ready=1
         break
     fi
     sleep 1
 done
 if [[ $vite_ready -eq 1 ]]; then
-    ok "Vite/HMR raggiungibile su http://localhost:5173"
+    ok "Vite/HMR raggiungibile su http://localhost:${VITE_PORT}"
 else
-    warn "Vite (porta 5173) non risponde ancora: il primo avvio può richiedere qualche secondo"
+    warn "Vite (porta ${VITE_PORT}) non risponde ancora: il primo avvio può richiedere qualche secondo"
 fi
 
 # ------------------------------------------------------ verifica finale -----
@@ -355,17 +509,17 @@ ok "APP_KEY presente e caricata"
 step "Verifica della pagina iniziale"
 http_status='000'
 for _ in $(seq 1 10); do
-    http_status="$(http_code http://127.0.0.1:8000/ 8000)"
+    http_status="$(http_code "http://127.0.0.1:${APP_PORT}/" "$APP_PORT")"
     [[ "$http_status" == 2* || "$http_status" == 3* ]] && break
     sleep 3
 done
 case "$http_status" in
     2*|3*)
-        ok "La pagina http://localhost:8000 risponde (HTTP $http_status)"
+        ok "La pagina http://localhost:${APP_PORT} risponde (HTTP $http_status)"
         ;;
     000)
         dump_logs
-        die "Nessuna risposta su http://localhost:8000."
+        die "Nessuna risposta su http://localhost:${APP_PORT}."
         ;;
     *)
         dump_laravel_log
@@ -378,8 +532,8 @@ cat <<EOF
 
 ${C_GREEN}${C_BOLD}✔ Book Translation Studio è pronto${C_RESET}
 
-  Applicazione   ${C_BOLD}http://localhost:8000${C_RESET}
-  Vite (HMR)     ${C_BOLD}http://localhost:5173${C_RESET}
+  Applicazione   ${C_BOLD}http://localhost:${APP_PORT}${C_RESET}
+  Vite (HMR)     ${C_BOLD}http://localhost:${VITE_PORT}${C_RESET}
   Database       ${DB_DATABASE} su ${C_BOLD}127.0.0.1:${DB_EXTERNAL_PORT}${C_RESET} (utente ${DB_USERNAME})
 
   Primo passo: apri ${C_BOLD}Account AI → Nuovo account${C_RESET} e inserisci un provider
