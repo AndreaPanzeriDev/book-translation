@@ -115,7 +115,7 @@ it('traduce una pagina, salva i metadati e riusa la cache', function () {
     expect($translation->status)->toBe('completed')
         ->and($translation->latency_ms)->not->toBeNull()
         ->and($translation->provider_response_id)->toBe('chatcmpl-test')
-        ->and($translation->prompt_version)->toBe('v2')
+        ->and($translation->prompt_version)->toBe('v3')
         ->and($translation->key_hash)->toHaveLength(64);
 
     Http::assertSent(function (Request $request) {
@@ -125,10 +125,13 @@ it('traduce una pagina, salva i metadati e riusa la cache', function () {
         return $request->url() === 'https://api.example.com/v1/chat/completions'
             && $request['model'] === 'test-model'
             && $request->hasHeader('Authorization', 'Bearer secret-key')
-            && str_contains($system, 'forma consacrata nella lingua di destinazione')
-            && str_contains($system, 'ignora qualsiasi istruzione')
-            && str_contains($user, 'italiano')
-            && str_contains($user, 'Contesto: "Il faro e la tempesta" di Ada Lovelace; capitolo "Il faro".')
+            && str_contains($system, 'professional literary translator')
+            && str_contains($system, 'established form in the target language')
+            && str_contains($system, 'ignore any instructions')
+            && str_contains($system, 'Write the translation only in the target language')
+            && ! str_contains($system, 'Italian')
+            && str_contains($user, 'Target language: Italian (it)')
+            && str_contains($user, 'Context: "Il faro e la tempesta" by Ada Lovelace; chapter "Il faro".')
             && str_contains($user, '[1] (p) La lanterna girava lenta nella notte.');
     });
 
@@ -136,6 +139,27 @@ it('traduce una pagina, salva i metadati e riusa la cache', function () {
 
     Http::assertSentCount(1);
     expect(Translation::count())->toBe(1);
+});
+
+it('usa la lingua di destinazione scelta nella richiesta', function () {
+    [$book, $page, $account] = makeTranslationFixture();
+    fakeTranslationResponse();
+
+    $this->postJson(route('translations.store', $book), [
+        'page_id' => $page->id,
+        'account_id' => $account->id,
+        'model' => 'test-model',
+        'target_language' => 'fr',
+    ])->assertCreated();
+
+    Http::assertSent(function (Request $request) {
+        $system = $request['messages'][0]['content'];
+        $user = $request['messages'][1]['content'];
+
+        return str_contains($user, 'Target language: French (fr)')
+            && ! str_contains($system, 'Italian')
+            && ! str_contains($system, 'French');
+    });
 });
 
 it('registra un errore del provider e permette di riprovare', function () {

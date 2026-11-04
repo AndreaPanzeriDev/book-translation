@@ -6,6 +6,7 @@ use App\Models\AiAccount;
 use App\Models\Book;
 use App\Services\Epub\BookImporter;
 use App\Services\Epub\InvalidEpubException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -101,6 +102,21 @@ class BookController extends Controller
             'pageIndex' => $pages,
             'accounts' => $accounts,
         ]);
+    }
+
+    public function update(Request $request, Book $book): JsonResponse
+    {
+        $data = $request->validate([
+            'target_language' => ['required', 'string', 'max:16'],
+        ], [
+            'target_language.required' => 'Seleziona una lingua di destinazione.',
+            'target_language.string' => 'La lingua di destinazione non è valida.',
+            'target_language.max' => 'La lingua di destinazione non è valida.',
+        ]);
+
+        $book->update(['target_language' => $data['target_language']]);
+
+        return response()->json(['book' => $book->toClientArray()]);
     }
 
     public function destroy(Book $book): RedirectResponse

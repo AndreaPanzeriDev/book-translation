@@ -226,6 +226,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
 
     const [activeChapterId, setActiveChapterId] = useState<number | null>(() => chapters[0]?.id ?? null);
     const [targetLanguage, setTargetLanguage] = useState(book.target_language);
+    const [savingTargetLanguage, setSavingTargetLanguage] = useState(false);
     const [selected, setSelected] = useState<Set<number>>(() => new Set());
     const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
     const [pages, setPages] = useState<Record<number, PageDetail>>({});
@@ -310,10 +311,26 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         return (translationCache[pageId] ?? []).find(
             (translation) =>
                 translation.status === 'completed' &&
+                translation.is_current &&
                 translation.ai_account_id === slot.accountId &&
                 translation.model === slot.model &&
                 translation.target_language === targetLanguage,
         );
+    };
+
+    const updateTargetLanguage = async (value: string) => {
+        const previous = targetLanguage;
+        setTargetLanguage(value);
+        setSavingTargetLanguage(true);
+
+        try {
+            await axios.patch(`/books/${book.id}`, { target_language: value });
+        } catch (error) {
+            setTargetLanguage(previous);
+            void message.error(errorMessage(error));
+        } finally {
+            setSavingTargetLanguage(false);
+        }
     };
 
     useEffect(() => {
@@ -871,7 +888,9 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     <Select
                         value={targetLanguage}
                         options={LANGUAGES}
-                        onChange={setTargetLanguage}
+                        onChange={updateTargetLanguage}
+                        loading={savingTargetLanguage}
+                        disabled={batch?.running}
                         style={{ width: 150 }}
                         showSearch
                         optionFilterProp="label"

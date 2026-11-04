@@ -16,7 +16,7 @@ Lo stack è **Laravel 13 + Inertia 3 + React 19 + TypeScript + Tailwind CSS 4 + 
 - Cache delle traduzioni per pagina, hash del testo, account, modello, lingua e versione del prompt: cambiare colonna è istantaneo quando la traduzione esiste già.
 - Allineamento a livello di frase: selezionando una o più frasi nell'originale, le frasi corrispondenti si evidenziano automaticamente in tutte le traduzioni visibili, anche quelle già in cache.
 - Chiavi API cifrate nel database e mai serializzate verso il browser.
-- Lingua di destinazione predefinita: italiano. Lingua di origine rilevata dall'EPUB.
+- Lingua di destinazione iniziale: italiano, modificabile e salvata per libro. Lingua di origine rilevata dall'EPUB.
 - Interfaccia interamente in italiano, senza login e pensata per un solo utente locale.
 
 ## Requisiti
@@ -124,7 +124,7 @@ Verificare la connessione con **Account AI → Verifica**. Se compare un errore 
 ## Uso
 
 1. **Importa un EPUB** dalla libreria. Il testo viene estratto in blocchi e raggruppato in pagine virtuali da circa 1.500 caratteri.
-2. Aprire lo studio del libro e scegliere la lingua di destinazione.
+2. Aprire lo studio del libro e scegliere la lingua di destinazione: la scelta viene salvata sul libro e ripristinata ai caricamenti successivi.
 3. Selezionare le pagine da tradurre:
    - clic sulla casella di una pagina;
    - `Shift + clic` per selezionare un intervallo;
@@ -142,7 +142,7 @@ L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione 
 
 - **Importazione** — `EpubParser` legge `container.xml`, il package OPF, l'indice EPUB 3 (`nav`) o EPUB 2 (`NCX`), estrae titolo, autore, lingua, copertina e blocchi di testo. `BookImporter` crea libro, capitoli, pagine virtuali e blocchi in una transazione.
 - **Pagine virtuali** — i blocchi vengono accumulati fino al limite di caratteri configurato (1.500 per impostazione predefinita). I blocchi più lunghi vengono divisi rispettando gli spazi.
-- **Traduzione** — `TranslationService` costruisce un prompt numerato, richiede al modello un JSON con gli stessi segmenti e valida che il numero di segmenti restituiti coincida con quello inviato. La risposta viene salvata come elenco di `{ block_id, text }`.
+- **Traduzione** — `TranslationService` costruisce un prompt numerato in inglese, con la lingua di destinazione scelta nell'interfaccia come unico target dell'output, richiede al modello un JSON con gli stessi segmenti e valida che il numero di segmenti restituiti coincida con quello inviato. La risposta viene salvata come elenco di `{ block_id, text }`.
 - **Batch** — il frontend raggruppa le pagine per account e applica la modalità scelta: in serie attende ogni risposta prima di inviare la successiva, in parallelo invia insieme tutte le richieste del gruppo. Account diversi procedono in modo indipendente.
 - **Cache** — la chiave è calcolata da pagina, hash del testo sorgente, account, modello, lingua di destinazione, versione del prompt e parametri. Una traduzione completata viene riusata; una fallita può essere ritentata.
 - **Allineamento** — il frontend divide blocchi originali e tradotti in frasi con `Intl.Segmenter`, mappa la selezione del browser alle frasi di origine e allinea le frasi tradotte per lunghezza e punteggiatura. Se il numero di frasi coincide, usa l'allineamento 1:1; altrimenti risolve casi 1:2, 2:1 e frasi mancanti.
@@ -180,15 +180,16 @@ La suite Pest copre:
 - parsing EPUB, metadati, indice, blocchi e copertina;
 - importazione, chunking delle pagine e libreria;
 - selezione e restituzione delle pagine con traduzioni;
-- traduzione, cache, errori del provider, JSON in code fence e segmenti mancanti;
+- traduzione, cache, errori del provider, JSON in code fence, segmenti mancanti e lingua di destinazione dinamica;
 - creazione e aggiornamento account, cifratura della chiave, modalità richieste, sincronizzazione modelli e cancellazione;
+- aggiornamento della lingua di destinazione del libro;
 - validazione dei capitoli appartenenti al libro.
 
 ```bash
 make test
 ```
 
-Stato attuale: **26 test, 139 asserzioni**.
+Stato attuale: **29 test, 148 asserzioni**.
 
 ## Privacy e sicurezza
 

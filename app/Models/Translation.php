@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Translation\TranslationPrompt;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -62,6 +63,8 @@ class Translation extends Model
             'ai_account_id' => $this->ai_account_id,
             'model' => $this->model,
             'target_language' => $this->target_language,
+            'prompt_version' => $this->prompt_version,
+            'is_current' => $this->prompt_version === TranslationPrompt::VERSION,
             'status' => $this->status,
             'translated_blocks' => $this->translated_blocks,
             'error' => $this->error,

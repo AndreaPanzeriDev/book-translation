@@ -77,3 +77,33 @@ it('rifiuta i file senza estensione epub', function () {
 
     expect(Book::count())->toBe(0);
 });
+
+it('aggiorna la lingua di destinazione del libro', function () {
+    $book = Book::create([
+        'title' => 'Libro esistente',
+        'original_filename' => 'libro.epub',
+        'file_path' => 'books/libro.epub',
+        'page_char_limit' => 1500,
+        'target_language' => 'it',
+    ]);
+
+    $this->patchJson(route('books.update', $book), ['target_language' => 'fr'])
+        ->assertOk()
+        ->assertJsonPath('book.target_language', 'fr');
+
+    expect($book->fresh()->target_language)->toBe('fr');
+});
+
+it('rifiuta una lingua di destinazione non valida', function () {
+    $book = Book::create([
+        'title' => 'Libro esistente',
+        'original_filename' => 'libro.epub',
+        'file_path' => 'books/libro.epub',
+        'page_char_limit' => 1500,
+        'target_language' => 'it',
+    ]);
+
+    $this->patchJson(route('books.update', $book), ['target_language' => ''])
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('target_language');
+});

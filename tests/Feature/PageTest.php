@@ -63,6 +63,7 @@ it('restituisce le pagine di un capitolo con blocchi e traduzioni', function () 
         ->assertJsonPath('pages.0.id', $page->id)
         ->assertJsonPath('pages.0.blocks.0.text', 'Ciao mondo')
         ->assertJsonPath('pages.0.translations.0.status', 'completed')
+        ->assertJsonPath('pages.0.translations.0.is_current', false)
         ->assertJsonPath('pages.0.translations.0.translated_blocks.0.text', 'Hello world');
 });
 

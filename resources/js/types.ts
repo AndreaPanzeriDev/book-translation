@@ -79,6 +79,8 @@ export interface Translation {
     ai_account_id: number | null;
     model: string;
     target_language: string;
+    prompt_version: string;
+    is_current: boolean;
     status: 'running' | 'completed' | 'failed';
     translated_blocks: TranslatedBlock[] | null;
     error: string | null;

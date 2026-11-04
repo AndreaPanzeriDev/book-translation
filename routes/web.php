@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [BookController::class, 'index'])->name('library');
 Route::post('/books', [BookController::class, 'store'])->name('books.store');
 Route::get('/books/{book}', [BookController::class, 'show'])->name('books.show');
+Route::patch('/books/{book}', [BookController::class, 'update'])->name('books.update');
 Route::delete('/books/{book}', [BookController::class, 'destroy'])->name('books.destroy');
 Route::get('/books/{book}/pages', [PageController::class, 'index'])->name('books.pages');
 Route::post('/books/{book}/translations', [TranslationController::class, 'store'])->name('translations.store');
