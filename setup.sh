@@ -8,9 +8,12 @@
 #   3. verifica le porte definite in .env e, se occupate, ne propone altre;
 #   4. costruisce l'immagine dell'applicazione (PHP 8.5 + Node 22 + Composer);
 #   5. avvia i container app + MariaDB;
-#   6. attende che il database sia pronto e che l'entrypoint abbia installato
-#      dipendenze composer/npm, generato APP_KEY ed eseguito le migrazioni;
-#   7. verifica finale: migrazioni, storage link, applicazione raggiungibile.
+#   6. attende che il database sia pronto, verifica che le credenziali di .env
+#      siano valide e, se il volume è di un'installazione precedente, propone
+#      di ricrearlo;
+#   7. attende che l'entrypoint abbia installato dipendenze composer/npm,
+#      generato APP_KEY ed eseguito le migrazioni;
+#   8. verifica finale: migrazioni, storage link, applicazione raggiungibile.
 #
 # Lo script è idempotente: si può rilanciare quando si vuole.
 #
@@ -324,6 +327,41 @@ dump_laravel_log() {
     printf '%s-----------------------------------------------------%s\n\n' "$C_DIM" "$C_RESET" >&2
 }
 
+db_query() {
+    # db_query UTENTE PASSWORD SQL [DATABASE] — esegue una query sul MariaDB
+    # di compose. MYSQL_PWD evita di passare la password sulla riga di comando.
+    local user="$1" password="$2" sql="$3" database="${4:-}"
+    if [[ -n "$database" ]]; then
+        docker compose exec -T db \
+            env MYSQL_PWD="$password" mariadb --protocol=tcp -h 127.0.0.1 \
+            -u "$user" -D "$database" -N -B -e "$sql" 2>/dev/null
+    else
+        docker compose exec -T db \
+            env MYSQL_PWD="$password" mariadb --protocol=tcp -h 127.0.0.1 \
+            -u "$user" -N -B -e "$sql" 2>/dev/null
+    fi
+}
+
+db_credentials_ok() {
+    db_query "$1" "$2" 'SELECT 1' "${3:-}" >/dev/null 2>&1
+}
+
+wait_for_db() {
+    local deadline=$(( $(date +%s) + DB_WAIT_TIMEOUT )) db_cid status
+    while (( $(date +%s) < deadline )); do
+        db_cid="$(docker compose ps -q db 2>/dev/null || true)"
+        if [[ -n "$db_cid" ]]; then
+            status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$db_cid" 2>/dev/null || echo unknown)"
+            if [[ "$status" == "healthy" ]]; then
+                return 0
+            fi
+        fi
+        printf '.'
+        sleep 2
+    done
+    return 1
+}
+
 # ------------------------------------------------------------------.env -----
 step "Configurazione di .env"
 
@@ -365,8 +403,17 @@ fi
 
 DB_CONNECTION="$(env_get DB_CONNECTION mysql)"
 DB_HOST="$(env_get DB_HOST db)"
+DB_PORT="$(env_get DB_PORT 3306)"
 DB_DATABASE="$(env_get DB_DATABASE book_translation)"
 DB_USERNAME="$(env_get DB_USERNAME book_translation)"
+DB_PASSWORD="$(env_get DB_PASSWORD)"
+DB_ROOT_PASSWORD="$(env_get DB_ROOT_PASSWORD)"
+
+# Compose dà precedenza alle variabili già esportate nella shell rispetto a
+# .env: senza questo export un DB_PASSWORD rimasto da un altro progetto
+# inizializzerebbe MariaDB con una password diversa da quella letta da Laravel
+# (che usa il .env montato nel container), causando "Access denied".
+export DB_CONNECTION DB_HOST DB_PORT DB_DATABASE DB_USERNAME DB_PASSWORD DB_ROOT_PASSWORD
 
 if [[ "$DB_CONNECTION" == "mysql" || "$DB_CONNECTION" == "mariadb" ]]; then
     case "$DB_HOST" in
@@ -402,9 +449,10 @@ if [[ -z "$current_app_url" \
     env_set APP_URL "http://localhost:${APP_PORT}"
 fi
 
-# Esporta i valori verificati: compose usa queste porte anche se la shell
+# Esporta i valori verificati: compose usa queste porte/URL anche se la shell
 # contiene valori diversi.
-export APP_PORT VITE_PORT DB_EXTERNAL_PORT
+APP_URL="$(env_get APP_URL)"
+export APP_PORT VITE_PORT DB_EXTERNAL_PORT APP_URL
 ok "Applicazione: http://localhost:$APP_PORT · Vite: http://localhost:$VITE_PORT · MariaDB esterno: 127.0.0.1:$DB_EXTERNAL_PORT"
 
 # --------------------------------------------------------------- docker -----
@@ -438,23 +486,63 @@ ok "Container avviati"
 
 # ------------------------------------------------------------ attesa DB -----
 step "Attesa del database ($DB_WAIT_TIMEOUT s max)"
-deadline=$(( $(date +%s) + DB_WAIT_TIMEOUT ))
-db_ready=0
-while (( $(date +%s) < deadline )); do
-    db_cid="$(docker compose ps -q db 2>/dev/null || true)"
-    if [[ -n "$db_cid" ]]; then
-        status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$db_cid" 2>/dev/null || echo unknown)"
-        if [[ "$status" == "healthy" ]]; then
-            db_ready=1
-            break
-        fi
+if wait_for_db; then
+    printf '\n'
+    ok "Database pronto"
+else
+    printf '\n'
+    dump_logs
+    die "Il database non è diventato pronto entro ${DB_WAIT_TIMEOUT}s."
+fi
+
+# --------------------------------------------------- credenziali del DB -----
+# MariaDB applica MYSQL_PASSWORD/MYSQL_ROOT_PASSWORD solo quando il volume
+# db-data viene creato. Se il volume esiste già con altre credenziali
+# (reinstallazione, .env rigenerato, DB_PASSWORD esportata nella shell),
+# Laravel non riesce ad autenticarsi e l'entrypoint si ferma sulle migrazioni.
+step "Verifica delle credenziali del database"
+
+if [[ "$DB_CONNECTION" != "mysql" && "$DB_CONNECTION" != "mariadb" ]] || [[ "$DB_HOST" != "db" ]]; then
+    info "Controllo saltato: il database non è quello gestito da compose.yaml"
+elif db_credentials_ok "$DB_USERNAME" "$DB_PASSWORD" "$DB_DATABASE"; then
+    ok "L'utente $DB_USERNAME accede al database $DB_DATABASE"
+else
+    warn "Il database non accetta le credenziali presenti in .env."
+    if db_credentials_ok root "$DB_ROOT_PASSWORD"; then
+        warn "Le credenziali root funzionano: DB_PASSWORD non coincide con quella del volume."
+    else
+        warn "Neanche le credenziali root coincidono: il volume db-data appartiene a un'altra installazione."
     fi
-    printf '.'
-    sleep 2
-done
-[[ $db_ready -eq 1 ]] || { printf '\n'; dump_logs; die "Il database non è diventato pronto entro ${DB_WAIT_TIMEOUT}s."; }
-printf '\n'
-ok "Database pronto"
+    warn "MariaDB usa DB_PASSWORD/DB_ROOT_PASSWORD solo alla prima creazione del volume."
+
+    if [[ $RESET -eq 1 ]]; then
+        die "Il database appena ricreato rifiuta ancora le credenziali di .env: controlla DB_* in .env."
+    fi
+
+    if [[ -t 0 ]]; then
+        read -r -p "    Ricreare il database? I dati esistenti andranno persi. [y/N] " answer
+        if [[ "$answer" =~ ^[Yy]$ ]]; then
+            docker compose down --volumes --remove-orphans --timeout 20 \
+                || die "Arresto dei container fallito."
+            docker compose up -d --remove-orphans \
+                || die "Avvio dei container fallito dopo il reset del database."
+            if ! wait_for_db; then
+                printf '\n'
+                dump_logs
+                die "Il database non è diventato pronto dopo il reset."
+            fi
+            printf '\n'
+            ok "Database ricreato"
+            db_credentials_ok "$DB_USERNAME" "$DB_PASSWORD" "$DB_DATABASE" \
+                || die "Il database ricreato rifiuta ancora le credenziali di .env. Controlla DB_* in .env."
+            ok "L'utente $DB_USERNAME accede al database $DB_DATABASE"
+        else
+            die "Allinea DB_USERNAME/DB_PASSWORD/DB_ROOT_PASSWORD in .env al volume esistente, oppure rilancia ./setup.sh --reset."
+        fi
+    else
+        die "Rilancia ./setup.sh --reset per ricreare il database (i dati esistenti andranno persi)."
+    fi
+fi
 
 # ------------------------------------------------------- attesa applicazione -
 step "Attesa dell'applicazione (alla prima esecuzione installa composer/npm: può richiedere alcuni minuti)"

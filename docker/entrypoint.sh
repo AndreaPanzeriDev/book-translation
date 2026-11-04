@@ -32,7 +32,22 @@ if [ ! -x node_modules/.bin/vite ]; then
     npm install
 fi
 
-php artisan migrate --force --no-interaction
+if ! php artisan migrate --force --no-interaction; then
+    cat >&2 <<'MSG'
+
+Migrazione fallita. Se l'errore è "Access denied for user ...", le credenziali
+in .env non corrispondono a quelle con cui è stato inizializzato il volume del
+database (MariaDB le applica solo alla prima creazione del volume).
+
+Dalla root del progetto esegui:
+
+    ./setup.sh --reset
+
+per ricreare il database (i dati esistenti andranno persi), oppure allinea
+DB_USERNAME/DB_PASSWORD/DB_ROOT_PASSWORD in .env alle credenziali esistenti.
+MSG
+    exit 1
+fi
 php artisan storage:link >/dev/null 2>&1 || true
 
 rm -f public/hot

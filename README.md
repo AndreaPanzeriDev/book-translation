@@ -229,6 +229,8 @@ tests/                    Suite Pest e fixture EPUB
 
 ## Risoluzione dei problemi
 
+- **Build fallita con `groupadd: GID '...' already exists`** — l'UID/GID dell'host coincide con un utente/gruppo già presente nell'immagine Debian (su macOS il gid `20` è `staff` sull'host e `dialout` nell'immagine). Il `Dockerfile` attuale riusa gruppo e utente esistenti: aggiornare il progetto e rilanciare `./setup.sh --rebuild`.
+- **`SQLSTATE[HY000] [1045] Access denied for user 'book_translation'`** — le credenziali in `.env` non corrispondono a quelle con cui è stato inizializzato il volume `db-data` (volume di un'installazione precedente, `.env` rigenerato oppure `DB_*` esportate nella shell). `./setup.sh` se ne accorge e propone di ricreare il volume; in alternativa eseguire `./setup.sh --reset` (perde il database) oppure allineare `DB_USERNAME`/`DB_PASSWORD`/`DB_ROOT_PASSWORD` in `.env` alle credenziali esistenti. Se si usa `make up` o `docker compose up` direttamente, assicurarsi che `DB_*` non siano esportate nella shell.
 - **Pagina bianca o asset non caricati** — controllare che Vite sia attivo sulla porta `VITE_PORT` di `.env` (default `5173`) e che `public/hot` contenga lo stesso URL, ad esempio `http://localhost:5173`. L'entrypoint elimina il file a ogni avvio; se il problema persiste, riavviare con `make down && make up`.
 - **Errori di connessione al provider** — usare **Verifica** nella pagina account. Per Ollama controllare `OLLAMA_HOST` e la raggiungibilità della porta dal container.
 - **Modello assente dall'elenco** — sincronizzare i modelli oppure digitare l'ID manualmente nel campo della colonna.

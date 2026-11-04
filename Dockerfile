@@ -24,8 +24,21 @@ COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/nod
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-RUN groupadd --gid "${GID}" app \
-    && useradd --create-home --uid "${UID}" --gid "${GID}" --shell /bin/bash app
+# L'UID/GID dell'host può coincidere con utenti/gruppi già presenti
+# nell'immagine (su macOS il gid 20 è "staff" sull'host e "dialout" in Debian):
+# in quel caso riusa il gruppo/utente esistente invece di far fallire il build.
+RUN set -eux; \
+    if getent group "${GID}" >/dev/null 2>&1; then \
+        group_name="$(getent group "${GID}" | head -n 1 | cut -d: -f1)"; \
+    else \
+        groupadd --gid "${GID}" app; \
+        group_name=app; \
+    fi; \
+    if ! getent passwd "${UID}" >/dev/null 2>&1; then \
+        useradd --create-home --uid "${UID}" --gid "${group_name}" --shell /bin/bash app; \
+    fi; \
+    mkdir -p /home/app; \
+    chown -R "${UID}:${GID}" /home/app
 
 COPY docker/php.ini /usr/local/etc/php/conf.d/zz-book-translator.ini
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -33,7 +46,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /var/www/html
 
-USER app
+# Numerico: funziona anche quando l'UID esiste già con un altro nome.
+USER ${UID}:${GID}
 
 EXPOSE 8000 5173
 
