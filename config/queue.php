@@ -17,6 +17,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Timeout dei job di traduzione
+    |--------------------------------------------------------------------------
+    |
+    | Letto da ProcessTranslationBatchItem. Deve restare maggiore di
+    | AI_REQUEST_TIMEOUT e minore di DB_QUEUE_RETRY_AFTER.
+    |
+    */
+
+    'translation_job_timeout' => (int) env('QUEUE_JOB_TIMEOUT', 360),
+
+    /*
+    |--------------------------------------------------------------------------
     | Queue Connections
     |--------------------------------------------------------------------------
     |
@@ -40,7 +52,9 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Deve restare maggiore del timeout dei job di traduzione
+            // (QUEUE_JOB_TIMEOUT, default 360) per evitare doppie esecuzioni.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 600),
             'after_commit' => false,
         ],
 

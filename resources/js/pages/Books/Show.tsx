@@ -1,19 +1,18 @@
 import {
     ArrowLeftOutlined,
-    CloseOutlined,
     LeftOutlined,
     OrderedListOutlined,
     RightOutlined,
-    StopOutlined,
     ThunderboltOutlined,
     TranslationOutlined,
 } from '@ant-design/icons';
 import { Link, router } from '@inertiajs/react';
-import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Modal, Progress, Select, Spin, Switch, Tag, Tooltip } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Select, Spin, Switch, Tag, Tooltip } from 'antd';
 import axios from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import BlockRenderer from '@/components/BlockRenderer';
+import { useTranslationBatch } from '@/contexts/TranslationBatchProvider';
 import AppLayout from '@/layouts/AppLayout';
 import { targetSentenceIndices, type TextSelection } from '@/lib/alignment';
 import { errorMessage, LANGUAGES, languageLabel, providerLabel } from '@/lib/languages';
@@ -39,31 +38,6 @@ type SlotKey = 'a' | 'b';
 interface Slot {
     accountId: number | null;
     model: string;
-}
-
-interface QueueItem {
-    pageId: number;
-    pagePosition: number;
-    slotKey: SlotKey;
-    accountId: number;
-    model: string;
-}
-
-interface BatchFailure extends QueueItem {
-    label: string;
-    message: string;
-}
-
-interface BatchState {
-    running: boolean;
-    cancelled: boolean;
-    total: number;
-    processed: number;
-    succeeded: number;
-    failed: BatchFailure[];
-    currentLabel: string | null;
-    inFlight: number;
-    activePageIds: number[];
 }
 
 function defaultModelFor(account: AiAccount | undefined): string {
@@ -223,6 +197,10 @@ function SlotPicker({
 
 export default function Show({ book, chapters, pageIndex, accounts }: Props) {
     const { message } = App.useApp();
+    const { startBatch, batchesByBook } = useTranslationBatch();
+    const bookBatch = batchesByBook[book.id];
+    const batchActive =
+        bookBatch?.status === 'queued' || bookBatch?.status === 'running';
 
     const [activeChapterId, setActiveChapterId] = useState<number | null>(() => chapters[0]?.id ?? null);
     const [targetLanguage, setTargetLanguage] = useState(book.target_language);
@@ -235,13 +213,13 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
     const [secondColumn, setSecondColumn] = useState(false);
     const [slotA, setSlotA] = useState<Slot>(() => defaultSlot(accounts));
     const [slotB, setSlotB] = useState<Slot>(() => defaultSlot(accounts, slotA.accountId));
-    const [batch, setBatch] = useState<BatchState | null>(null);
-    const [failedDetail, setFailedDetail] = useState<BatchFailure | null>(null);
     const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
+    const [startingBatch, setStartingBatch] = useState(false);
 
-    const cancelRef = useRef(false);
-    const abortRef = useRef<AbortController | null>(null);
+    const translationBusy = batchActive || startingBatch;
+
     const selectionSignatureRef = useRef<string | null>(null);
+    const completedCountRef = useRef(bookBatch?.succeeded ?? 0);
 
     const activeAccounts = useMemo(() => accounts.filter((account) => account.is_active), [accounts]);
     const chapterPages = useMemo(
@@ -361,16 +339,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     const next = { ...previous };
 
                     for (const page of data.pages) {
-                        const existing = next[page.id] ?? [];
-                        const merged = [...existing];
-
-                        for (const translation of page.translations) {
-                            if (!merged.some((item) => item.id === translation.id)) {
-                                merged.push(translation);
-                            }
-                        }
-
-                        next[page.id] = merged;
+                        next[page.id] = page.translations;
                     }
 
                     return next;
@@ -389,6 +358,57 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
 
         return () => controller.abort();
     }, [activeChapterId, book.id, message]);
+
+    const completedCount = bookBatch?.succeeded ?? 0;
+
+    useEffect(() => {
+        if (completedCount <= completedCountRef.current) {
+            completedCountRef.current = completedCount;
+
+            return;
+        }
+
+        completedCountRef.current = completedCount;
+
+        if (!activeChapterId) {
+            return;
+        }
+
+        const controller = new AbortController();
+
+        axios
+            .get<{ pages: PageDetail[] }>(`/books/${book.id}/pages`, {
+                params: { chapter_id: activeChapterId },
+                signal: controller.signal,
+            })
+            .then(({ data }) => {
+                setPages((previous) => {
+                    const next = { ...previous };
+
+                    for (const page of data.pages) {
+                        next[page.id] = page;
+                    }
+
+                    return next;
+                });
+
+                setTranslationCache((previous) => {
+                    const next = { ...previous };
+
+                    for (const page of data.pages) {
+                        next[page.id] = page.translations;
+                    }
+
+                    return next;
+                });
+            })
+            .catch(() => {
+                // Il refresh è silenzioso: la pagina verrà ricaricata al
+                // prossimo aggiornamento del batch o cambio capitolo.
+            });
+
+        return () => controller.abort();
+    }, [completedCount, activeChapterId, book.id]);
 
     useEffect(() => {
         let frame: number | null = null;
@@ -520,25 +540,6 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         setSourceSelection(null);
     }, [activeChapterId]);
 
-    const addTranslation = (translation: Translation) => {
-        setTranslationCache((previous) => {
-            const existing = previous[translation.page_id] ?? [];
-            const filtered = existing.filter(
-                (item) =>
-                    !(
-                        item.ai_account_id === translation.ai_account_id &&
-                        item.model === translation.model &&
-                        item.target_language === translation.target_language
-                    ),
-            );
-
-            return {
-                ...previous,
-                [translation.page_id]: [...filtered, translation],
-            };
-        });
-    };
-
     const togglePage = (pageId: number, index: number) => {
         setSelected((previous) => {
             const next = new Set(previous);
@@ -583,210 +584,12 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         });
     };
 
-    const buildItems = (pageIds: number[]): QueueItem[] => {
-        const items: QueueItem[] = [];
-        const seen = new Set<string>();
-
-        for (const pageId of pageIds) {
-            const page = pageIndex.find((item) => item.id === pageId);
-
-            for (const { key, slot } of activeSlots) {
-                if (!slot.accountId || !slot.model || !slotIsReady(slot) || findTranslation(pageId, slot)) {
-                    continue;
-                }
-
-                const signature = `${pageId}:${slot.accountId}:${slot.model}`;
-
-                if (seen.has(signature)) {
-                    continue;
-                }
-
-                seen.add(signature);
-
-                items.push({
-                    pageId,
-                    pagePosition: page?.position ?? pageId,
-                    slotKey: key,
-                    accountId: slot.accountId,
-                    model: slot.model,
-                });
-            }
-        }
-
-        return items;
-    };
-
-    const runBatch = async (items: QueueItem[]) => {
-        if (items.length === 0) {
-            void message.info('Tutte le traduzioni richieste sono già in cache.');
+    const launchBatch = async (pageIds: number[]) => {
+        if (startingBatch) {
             return;
         }
 
-        cancelRef.current = false;
-        setFailedDetail(null);
-        const controller = new AbortController();
-        abortRef.current = controller;
-
-        setBatch({
-            running: true,
-            cancelled: false,
-            total: items.length,
-            processed: 0,
-            succeeded: 0,
-            failed: [],
-            currentLabel: null,
-            inFlight: 0,
-            activePageIds: [],
-        });
-
-        let processed = 0;
-        let succeeded = 0;
-        const failed: BatchFailure[] = [];
-        const inFlightByPage = new Map<number, number>();
-        const inFlightLabels = new Map<string, string>();
-
-        const syncProgress = () => {
-            const activePageIds = Array.from(inFlightByPage.keys());
-            const inFlight = Array.from(inFlightByPage.values()).reduce(
-                (total, count) => total + count,
-                0,
-            );
-
-            setBatch((previous) =>
-                previous
-                    ? {
-                          ...previous,
-                          processed,
-                          succeeded,
-                          failed: [...failed],
-                          inFlight,
-                          activePageIds,
-                          currentLabel:
-                              inFlight === 1
-                                  ? (Array.from(inFlightLabels.values())[0] ?? null)
-                                  : null,
-                      }
-                    : previous,
-            );
-        };
-
-        const processItem = async (item: QueueItem) => {
-            if (cancelRef.current) {
-                return;
-            }
-
-            const label = `Pagina ${item.pagePosition} · ${item.model}`;
-            const itemKey = `${item.pageId}:${item.slotKey}:${item.accountId}:${item.model}`;
-
-            inFlightByPage.set(item.pageId, (inFlightByPage.get(item.pageId) ?? 0) + 1);
-            inFlightLabels.set(itemKey, label);
-            syncProgress();
-
-            let finished = false;
-
-            try {
-                const { data } = await axios.post<{ translation: Translation }>(
-                    `/books/${book.id}/translations`,
-                    {
-                        page_id: item.pageId,
-                        account_id: item.accountId,
-                        model: item.model,
-                        target_language: targetLanguage,
-                    },
-                    { signal: controller.signal },
-                );
-
-                addTranslation(data.translation);
-                succeeded += 1;
-                finished = true;
-            } catch (error) {
-                if (axios.isCancel(error)) {
-                    return;
-                }
-
-                failed.push({ ...item, label, message: errorMessage(error) });
-                finished = true;
-            } finally {
-                inFlightLabels.delete(itemKey);
-                const remaining = (inFlightByPage.get(item.pageId) ?? 1) - 1;
-
-                if (remaining <= 0) {
-                    inFlightByPage.delete(item.pageId);
-                } else {
-                    inFlightByPage.set(item.pageId, remaining);
-                }
-
-                if (finished) {
-                    processed += 1;
-                }
-
-                syncProgress();
-            }
-        };
-
-        const groups = new Map<number, QueueItem[]>();
-
-        for (const item of items) {
-            const group = groups.get(item.accountId) ?? [];
-            group.push(item);
-            groups.set(item.accountId, group);
-        }
-
-        const runGroup = async (accountId: number, group: QueueItem[]) => {
-            const mode =
-                accounts.find((account) => account.id === accountId)?.request_mode ?? 'serial';
-
-            if (mode === 'parallel') {
-                await Promise.all(group.map((item) => processItem(item)));
-                return;
-            }
-
-            for (const item of group) {
-                if (cancelRef.current) {
-                    return;
-                }
-
-                await processItem(item);
-            }
-        };
-
-        await Promise.all(
-            Array.from(groups.entries()).map(([accountId, group]) => runGroup(accountId, group)),
-        );
-
-        if (abortRef.current === controller) {
-            abortRef.current = null;
-        }
-
-        const cancelled = cancelRef.current;
-
-        setBatch((previous) =>
-            previous
-                ? {
-                      ...previous,
-                      running: false,
-                      cancelled,
-                      currentLabel: null,
-                      inFlight: 0,
-                      activePageIds: [],
-                      processed,
-                      succeeded,
-                      failed: [...failed],
-                  }
-                : previous,
-        );
-
-        if (!cancelled && failed.length === 0) {
-            void message.success(`Traduzione completata: ${succeeded} ${succeeded === 1 ? 'pagina' : 'pagine'}.`);
-        } else if (failed.length > 0) {
-            void message.warning(
-                `${failed.length} ${failed.length === 1 ? 'traduzione non riuscita' : 'traduzioni non riuscite'}. Controlla il pannello.`,
-            );
-        }
-    };
-
-    const startTranslation = () => {
-        if (selected.size === 0) {
+        if (pageIds.length === 0) {
             void message.warning('Seleziona almeno una pagina.');
             return;
         }
@@ -796,32 +599,53 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
             return;
         }
 
-        void runBatch(buildItems(Array.from(selected)));
+        const slots = activeSlots.flatMap(({ key, slot }) =>
+            slot.accountId === null
+                ? []
+                : [
+                      {
+                          slot_key: key,
+                          account_id: slot.accountId,
+                          model: slot.model.trim(),
+                      },
+                  ],
+        );
+
+        setStartingBatch(true);
+
+        try {
+            const result = await startBatch(book.id, {
+                slots,
+                page_ids: pageIds,
+                target_language: targetLanguage,
+            });
+
+            if (result.batch) {
+                void message.success(
+                    'Traduzione avviata: il server continua anche se cambi pagina o chiudi il tab.',
+                );
+            } else {
+                void message.info(
+                    result.message ?? 'Tutte le traduzioni richieste sono già in cache.',
+                );
+            }
+        } catch (error) {
+            void message.error(errorMessage(error));
+        } finally {
+            setStartingBatch(false);
+        }
+    };
+
+    const startTranslation = () => {
+        void launchBatch(Array.from(selected));
     };
 
     const translatePage = (pageId: number) => {
-        if (!slotsReady) {
-            void message.warning('Scegli account e modello per ogni colonna di traduzione.');
+        if (translationBusy) {
             return;
         }
 
-        void runBatch(buildItems([pageId]));
-    };
-
-    const retryFailed = () => {
-        if (!batch || batch.failed.length === 0) {
-            return;
-        }
-
-        const items = batch.failed.map(({ pageId, pagePosition, slotKey, accountId, model }) => ({
-            pageId,
-            pagePosition,
-            slotKey,
-            accountId,
-            model,
-        }));
-
-        void runBatch(items);
+        void launchBatch([pageId]);
     };
 
     const updateSlot = (key: SlotKey, slot: Slot) => {
@@ -890,7 +714,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                         options={LANGUAGES}
                         onChange={updateTargetLanguage}
                         loading={savingTargetLanguage}
-                        disabled={batch?.running}
+                        disabled={translationBusy}
                         style={{ width: 150 }}
                         showSearch
                         optionFilterProp="label"
@@ -1004,10 +828,10 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                             className="mt-3"
                             icon={<TranslationOutlined />}
                             onClick={startTranslation}
-                            disabled={selected.size === 0 || !slotsReady || batch?.running}
-                            loading={batch?.running}
+                            disabled={selected.size === 0 || !slotsReady || translationBusy}
+                            loading={translationBusy}
                         >
-                            Traduci selezione
+                            {translationBusy ? 'Traduzione in corso…' : 'Traduci selezione'}
                         </Button>
                         <p className="mt-2 text-[11px] leading-snug text-ink-500">
                             {requestModeSummary} Le traduzioni già in cache vengono saltate
@@ -1120,14 +944,15 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                             </div>
 
                                             <div className="flex items-center gap-2">
-                                                {batch?.running && batch.activePageIds.includes(info.id) && (
-                                                    <Spin size="small" />
-                                                )}
+                                                {batchActive &&
+                                                    (bookBatch?.active_page_ids.includes(info.id) ?? false) && (
+                                                        <Spin size="small" />
+                                                    )}
                                                 <Button
                                                     size="small"
                                                     icon={<ThunderboltOutlined />}
                                                     onClick={() => translatePage(info.id)}
-                                                    disabled={!slotsReady || batch?.running}
+                                                    disabled={!slotsReady || translationBusy}
                                                 >
                                                     Traduci
                                                 </Button>
@@ -1250,7 +1075,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                                     <Button
                                                                         size="small"
                                                                         onClick={() => translatePage(info.id)}
-                                                                        disabled={!ready || batch?.running}
+                                                                        disabled={!ready || translationBusy}
                                                                     >
                                                                         Traduci ora
                                                                     </Button>
@@ -1268,132 +1093,6 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     )}
                 </section>
             </div>
-
-            {batch && (
-                <div className="fixed bottom-4 right-4 z-40 w-[calc(100%-2rem)] max-w-md rounded-xl border border-parchment-200 bg-white p-4 shadow-2xl">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                        <strong className="text-sm text-ink-900">
-                            {batch.running
-                                ? 'Traduzione in corso'
-                                : batch.cancelled
-                                  ? 'Traduzione interrotta'
-                                  : 'Traduzione completata'}
-                        </strong>
-                        <Button
-                            type="text"
-                            size="small"
-                            icon={<CloseOutlined />}
-                            onClick={() => setBatch(null)}
-                            disabled={batch.running}
-                            aria-label="Chiudi pannello"
-                        />
-                    </div>
-
-                    <Progress
-                        percent={
-                            batch.total === 0
-                                ? 100
-                                : Math.round((batch.processed / batch.total) * 100)
-                        }
-                        status={batch.failed.length > 0 ? 'exception' : batch.running ? 'active' : 'normal'}
-                        size="small"
-                    />
-
-                    <div className="mt-1 flex items-center justify-between text-xs text-ink-500">
-                        <span>
-                            {batch.processed} / {batch.total}
-                        </span>
-                        <span>
-                            {batch.succeeded} {batch.succeeded === 1 ? 'riuscita' : 'riuscite'} ·{' '}
-                            {batch.failed.length}{' '}
-                            {batch.failed.length === 1 ? 'errore' : 'errori'}
-                        </span>
-                    </div>
-
-                    {batch.inFlight > 0 && (
-                        <p className="mt-2 truncate text-xs text-ink-700">
-                            {batch.inFlight === 1 && batch.currentLabel
-                                ? `In corso: ${batch.currentLabel}`
-                                : `${batch.inFlight} richieste in corso`}
-                        </p>
-                    )}
-
-                    {batch.failed.length > 0 && (
-                        <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md bg-red-50 p-2 text-[11px] text-red-700">
-                            {batch.failed.map((failure, index) => (
-                                <button
-                                    key={`${failure.pageId}-${failure.slotKey}-${index}`}
-                                    type="button"
-                                    className="block w-full cursor-pointer truncate text-left hover:underline"
-                                    title="Clicca per vedere l’errore completo"
-                                    onClick={() => setFailedDetail(failure)}
-                                >
-                                    <span className="font-medium">{failure.label}:</span>{' '}
-                                    {failure.message}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    <div className="mt-3 flex gap-2">
-                        {batch.running ? (
-                            <Button
-                                danger
-                                block
-                                icon={<StopOutlined />}
-                                onClick={() => {
-                                    cancelRef.current = true;
-                                    abortRef.current?.abort();
-                                }}
-                            >
-                                Interrompi
-                            </Button>
-                        ) : (
-                            <>
-                                {batch.failed.length > 0 && (
-                                    <Button type="primary" block onClick={retryFailed}>
-                                        Riprova {batch.failed.length}
-                                    </Button>
-                                )}
-                                <Button block onClick={() => setBatch(null)}>
-                                    Chiudi
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            <Modal
-                title={failedDetail?.label ?? 'Dettaglio errore'}
-                open={failedDetail !== null}
-                onCancel={() => setFailedDetail(null)}
-                footer={[
-                    <Button
-                        key="copy"
-                        onClick={() => {
-                            if (!failedDetail) {
-                                return;
-                            }
-
-                            navigator.clipboard
-                                .writeText(failedDetail.message)
-                                .then(() => message.success('Errore copiato negli appunti.'))
-                                .catch(() => message.error('Impossibile copiare l’errore.'));
-                        }}
-                    >
-                        Copia
-                    </Button>,
-                    <Button key="close" type="primary" onClick={() => setFailedDetail(null)}>
-                        Chiudi
-                    </Button>,
-                ]}
-                width={640}
-            >
-                <p className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-red-50 p-3 font-mono text-xs text-red-700">
-                    {failedDetail?.message}
-                </p>
-            </Modal>
         </AppLayout>
     );
 }

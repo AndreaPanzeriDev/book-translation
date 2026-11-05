@@ -12,7 +12,7 @@ RUN apt-get update \
         libmariadb-dev \
         libsqlite3-dev \
         unzip \
-    && docker-php-ext-install -j"$(nproc)" intl zip pdo_mysql pdo_sqlite \
+    && docker-php-ext-install -j"$(nproc)" intl zip pdo_mysql pdo_sqlite pcntl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -42,7 +42,8 @@ RUN set -eux; \
 
 COPY docker/php.ini /usr/local/etc/php/conf.d/zz-book-translator.ini
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY docker/queue-entrypoint.sh /usr/local/bin/queue-entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/queue-entrypoint.sh
 
 WORKDIR /var/www/html
 

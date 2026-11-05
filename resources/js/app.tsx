@@ -8,6 +8,9 @@ import itIT from 'antd/locale/it_IT';
 import axios from 'axios';
 import { createRoot } from 'react-dom/client';
 
+import TranslationBatchPanel from '@/components/TranslationBatchPanel';
+import { TranslationBatchProvider } from '@/contexts/TranslationBatchProvider';
+
 const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
 
 if (csrfToken) {
@@ -61,7 +64,10 @@ createInertiaApp({
                     }}
                 >
                     <AntdApp>
-                        <App {...props} />
+                        <TranslationBatchProvider>
+                            <App {...props} />
+                            <TranslationBatchPanel />
+                        </TranslationBatchProvider>
                     </AntdApp>
                 </ConfigProvider>
             </StyleProvider>,

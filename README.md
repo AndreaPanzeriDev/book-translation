@@ -12,7 +12,7 @@ Lo stack è **Laravel 13 + Inertia 3 + React 19 + TypeScript + Tailwind CSS 4 + 
 - Confronto originale + 1 traduzione oppure originale + 2 traduzioni (massimo tre colonne).
 - Ogni colonna di traduzione sceglie autonomamente account e modello.
 - Più account contemporanei: OpenAI, OpenRouter, Ollama locale o qualsiasi endpoint compatibile OpenAI.
-- Traduzione in batch con modalità per account: in serie (una richiesta alla volta) o in parallelo (tutte le pagine selezionate insieme), con avanzamento nel tab, interruzione e riprova degli errori.
+- Traduzione in batch eseguita sul server: un batch attivo per libro, libri diversi in parallelo, avanzamento persistente anche dopo refresh o chiusura del tab. Pannello globale con interruzione e riprova degli errori.
 - Cache delle traduzioni per pagina, hash del testo, account, modello, lingua e versione del prompt: cambiare colonna è istantaneo quando la traduzione esiste già.
 - Allineamento a livello di frase: selezionando una o più frasi nell'originale, le frasi corrispondenti si evidenziano automaticamente in tutte le traduzioni visibili, anche quelle già in cache.
 - Chiavi API cifrate nel database e mai serializzate verso il browser.
@@ -31,7 +31,7 @@ Lo stack è **Laravel 13 + Inertia 3 + React 19 + TypeScript + Tailwind CSS 4 + 
 ./setup.sh
 ```
 
-Lo script fa tutto: crea `.env` da `.env.example` con password del database e `APP_KEY` generate, costruisce l'immagine, avvia app e MariaDB, attende che composer/npm siano installati e che le migrazioni siano applicate, poi verifica che la pagina iniziale risponda. È idempotente: si può rilanciare quando si vuole.
+Lo script fa tutto: crea `.env` da `.env.example` con password del database e `APP_KEY` generate, costruisce l'immagine, avvia app, worker di traduzione e MariaDB, attende che composer/npm siano installati e che le migrazioni siano applicate, poi verifica che la pagina iniziale risponda. È idempotente: si può rilanciare quando si vuole.
 
 Il primo avvio può richiedere qualche minuto (build dell'immagine + `composer install` + `npm install`).
 
@@ -53,6 +53,8 @@ Le porte sono definite **solo in `.env`** e sono pubblicate esclusivamente su `1
 - `DB_EXTERNAL_PORT` (default `3307`) — MariaDB per client esterni.
 
 Se una porta è occupata, `./setup.sh` ne propone un'altra, la salva in `.env` e la usa per tutti i servizi. Non serve modificare `compose.yaml`, `vite.config.ts` o `docker/entrypoint.sh`. Per forzare una porta diversa, modifica `APP_PORT`, `VITE_PORT` o `DB_EXTERNAL_PORT` in `.env` e rilancia `./setup.sh`: `APP_URL` viene aggiornato automaticamente.
+
+Le traduzioni vengono eseguite dal servizio `queue`, che usa lo stesso codice e lo stesso database dell'app. Il numero di worker è configurabile con `QUEUE_WORKERS` in `.env` (default `4`). Se il servizio è fermo, i batch restano **In coda** e riprendono quando il worker torna attivo; i job sopravvivono anche a un riavvio dei container.
 
 Per fermare tutto:
 
@@ -84,7 +86,7 @@ Ogni account ha una **Modalità richieste**:
 - **In serie** (predefinita) — quando si traduce una selezione, le pagine vengono inviate una alla volta; la successiva parte solo quando la precedente è terminata.
 - **In parallelo** — tutte le pagine selezionate vengono inviate contemporaneamente, con una richiesta separata per pagina. Con due colonne di traduzione, ogni account segue la propria modalità in modo indipendente.
 
-In parallelo l’app non impone un limite proprio, ma restano i limiti dell’ambiente: il browser apre al massimo circa 6 connessioni per host e `php artisan serve` usa `PHP_CLI_SERVER_WORKERS=4`. Con 4 pagine si ottengono 4 richieste contemporanee; per selezioni più grandi le richieste in eccesso vengono messe in coda dall’infrastruttura. Per aumentare il parallelismo reale si può alzare `PHP_CLI_SERVER_WORKERS` in `compose.yaml` (a costo di maggiore memoria).
+In parallelo le richieste vengono distribuite ai worker del servizio `queue`: con `QUEUE_WORKERS=4` si possono avere fino a 4 richieste contemporanee in totale, condivise tra i batch attivi. In serie un account esegue una sola richiesta alla volta anche se lo usano libri diversi, grazie a un lock condiviso. Per aumentare il parallelismo alzare `QUEUE_WORKERS` in `.env` e riavviare con `./setup.sh` (a costo di maggiore memoria).
 
 Le chiavi API sono cifrate con la `APP_KEY` di Laravel e non vengono mai inviate al browser. In modifica, lasciare vuoto il campo chiave per mantenere quella esistente.
 
@@ -131,9 +133,9 @@ Verificare la connessione con **Account AI → Verifica**. Se compare un errore 
    - **Seleziona capitolo** per il capitolo attivo;
    - **Tutto il libro** per l'intero volume.
 4. Scegliere account e modello per **Traduzione 1**. Attivare **Confronta due traduzioni** per aggiungere una seconda colonna indipendente.
-5. Premere **Traduci selezione** oppure **Traduci** nella singola pagina. La modalità serie/parallela dell’account decide se le pagine selezionate partono una alla volta o tutte insieme.
-6. Seguire l’avanzamento nel pannello in basso a destra: mostra richieste elaborate, riuscite, errori, richieste in corso e permette di interrompere o riprovare i fallimenti.
-7. Le traduzioni già ottenute vengono mostrate con il tag `cache` e non vengono richieste di nuovo.
+5. Premere **Traduci selezione** oppure **Traduci** nella singola pagina. Il batch viene creato sul server e prosegue anche se si cambia pagina, si fa refresh o si chiude il tab.
+6. Seguire l’avanzamento nel pannello globale in basso a destra: mostra libri in traduzione, richieste elaborate, riuscite, errori, richieste in corso e permette di interrompere o riprovare i fallimenti. Il pannello resta visibile su Account AI, Libreria e altri libri.
+7. Un libro può avere un solo batch attivo; libri diversi procedono contemporaneamente. Le traduzioni già ottenute vengono mostrate con il tag `cache` e non vengono richieste di nuovo.
 8. Selezionare una frase nell'originale: la traduzione corrispondente viene evidenziata automaticamente in ogni colonna visibile.
 
 L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione possono usare lo stesso account con modelli diversi oppure account diversi.
@@ -143,20 +145,23 @@ L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione 
 - **Importazione** — `EpubParser` legge `container.xml`, il package OPF, l'indice EPUB 3 (`nav`) o EPUB 2 (`NCX`), estrae titolo, autore, lingua, copertina e blocchi di testo. `BookImporter` crea libro, capitoli, pagine virtuali e blocchi in una transazione.
 - **Pagine virtuali** — i blocchi vengono accumulati fino al limite di caratteri configurato (1.500 per impostazione predefinita). I blocchi più lunghi vengono divisi rispettando gli spazi.
 - **Traduzione** — `TranslationService` costruisce un prompt numerato in inglese, con la lingua di destinazione scelta nell'interfaccia come unico target dell'output, richiede al modello un JSON con gli stessi segmenti e valida che il numero di segmenti restituiti coincida con quello inviato. La risposta viene salvata come elenco di `{ block_id, text }`.
-- **Batch** — il frontend raggruppa le pagine per account e applica la modalità scelta: in serie attende ogni risposta prima di inviare la successiva, in parallelo invia insieme tutte le richieste del gruppo. Account diversi procedono in modo indipendente.
+- **Batch** — il browser crea un batch tramite API e poi osserva solo lo stato salvato nel database. Il server crea `translation_batches` e `translation_batch_items`, esclude le pagine già in cache e accoda un job per pagina/slot. In serie un account esegue un item alla volta tramite lock e catena i successivi; in parallelo tutti gli item dell'account partono subito. Un batch attivo per libro è garantito da un lock sulla riga del libro; libri diversi procedono in parallelo.
 - **Cache** — la chiave è calcolata da pagina, hash del testo sorgente, account, modello, lingua di destinazione, versione del prompt e parametri. Una traduzione completata viene riusata; una fallita può essere ritentata.
 - **Allineamento** — il frontend divide blocchi originali e tradotti in frasi con `Intl.Segmenter`, mappa la selezione del browser alle frasi di origine e allinea le frasi tradotte per lunghezza e punteggiatura. Se il numero di frasi coincide, usa l'allineamento 1:1; altrimenti risolve casi 1:2, 2:1 e frasi mancanti.
 - **Provider** — `OpenAiCompatibleClient` usa l'endpoint `/chat/completions` e `/models` dell'API OpenAI. Funziona con OpenAI, OpenRouter, Ollama e server compatibili.
 - **Frontend** — Inertia collega le pagine React ai controller Laravel. Ant Design è configurato con `StyleProvider layer` e tema personalizzato; Tailwind gestisce il layout. Le pagine sono caricate in modo lazy da Vite.
-- **Persistenza** — SQLite in `database/database.sqlite`; EPUB originali in `storage/app/private/books`; copertine in `storage/app/public/covers`.
+- **Code** — la coda usa il driver `database` (tabella `jobs`). Il servizio `queue` avvia `QUEUE_WORKERS` processi `queue:work` sulla coda `translations`. `QUEUE_JOB_TIMEOUT` (default `360`) è il timeout effettivo del job e deve restare sopra `AI_REQUEST_TIMEOUT`; `DB_QUEUE_RETRY_AFTER` deve restare sopra `QUEUE_JOB_TIMEOUT` per evitare doppie esecuzioni.
+- **Persistenza** — MariaDB nel container; in test SQLite in memoria. EPUB originali in `storage/app/private/books`; copertine in `storage/app/public/covers`.
 
 ## Comandi utili
 
 ```bash
 make up             # avvia (e costruisce se necessario)
 make down           # ferma i container
-make logs           # log in tempo reale
-make shell          # shell nel container
+make logs           # log di Laravel e Vite in tempo reale
+make logs-queue     # log dei worker di traduzione
+make shell          # shell nel container app
+make queue-shell    # shell nel container queue
 make artisan ARGS="migrate:status"
 make npm ARGS="run build"
 make test           # suite Pest
@@ -181,6 +186,8 @@ La suite Pest copre:
 - importazione, chunking delle pagine e libreria;
 - selezione e restituzione delle pagine con traduzioni;
 - traduzione, cache, errori del provider, JSON in code fence, segmenti mancanti e lingua di destinazione dinamica;
+- creazione batch, un solo batch attivo per libro, batch concorrenti su libri diversi, cache saltata, annullamento e riprova;
+- job di batch: successo, errore del provider, annullamento, ripresa dopo crash, account disattivato e catena seriale;
 - creazione e aggiornamento account, cifratura della chiave, modalità richieste, sincronizzazione modelli e cancellazione;
 - aggiornamento della lingua di destinazione del libro;
 - validazione dei capitoli appartenenti al libro.
@@ -189,7 +196,7 @@ La suite Pest copre:
 make test
 ```
 
-Stato attuale: **29 test, 148 asserzioni**.
+Stato attuale: **53 test, 239 asserzioni**.
 
 ## Privacy e sicurezza
 
@@ -205,7 +212,7 @@ Stato attuale: **29 test, 148 asserzioni**.
 - Niente DRM: i file protetti non possono essere importati.
 - La formattazione inline (corsivi, grassetti, collegamenti) viene normalizzata in testo semplice; vengono conservati i blocchi strutturali come titoli, paragrafi, citazioni ed elenchi.
 - Delle immagini viene estratta solo la copertina.
-- Nessuna coda in background: le traduzioni vengono eseguite dal browser e richiedono che il tab resti aperto.
+- I batch sono persistiti e ripresi dai worker, ma non c'è autenticazione: chiunque raggiunga l'app può avviare o interrompere una traduzione.
 - Le pagine virtuali sono una suddivisione pratica del testo, non la paginazione dell'edizione originale.
 - Il confronto è limitato a due traduzioni contemporanee, come richiesto.
 - I modelli piccoli o poco istruiti possono restituire un numero errato di segmenti: l'errore viene mostrato e la richiesta può essere ritentata o assegnata a un altro modello.
@@ -214,16 +221,18 @@ Stato attuale: **29 test, 148 asserzioni**.
 
 ```
 app/
-  Http/Controllers/       Libreria, pagine, traduzioni, account AI
-  Models/                 Book, Chapter, Page, Block, AiAccount, AiModel, Translation
+  Http/Controllers/       Libreria, pagine, traduzioni, batch, account AI
+  Jobs/                   ProcessTranslationBatchItem
+  Models/                 Book, Chapter, Page, Block, AiAccount, AiModel, Translation, TranslationBatch, TranslationBatchItem
   Services/Epub/          Parser EPUB e importatore
-  Services/Translation/   Servizio di traduzione e client OpenAI-compatibile
+  Services/Translation/   Servizio di traduzione, client OpenAI e orchestrazione batch
 resources/js/
   pages/                  Library, Accounts, Books/Show
-  components/             Renderer dei blocchi
+  components/             Renderer dei blocchi e pannello batch globale
+  contexts/               Provider del batch globale con polling
   layouts/                Layout condiviso
   lib/                    Lingue, messaggi di errore, flash
-docker/                   PHP ini ed entrypoint
+docker/                   PHP ini, entrypoint app e entrypoint queue
 tests/                    Suite Pest e fixture EPUB
 ```
 
@@ -236,7 +245,9 @@ tests/                    Suite Pest e fixture EPUB
 - **Modello assente dall'elenco** — sincronizzare i modelli oppure digitare l'ID manualmente nel campo della colonna.
 - **Timeout con modelli locali grandi** — il primo caricamento può superare i 300 secondi. Aumentare `AI_REQUEST_TIMEOUT` in `.env` e riavviare il container con `make down && make up`.
 - **Traduzione fallita per numero di segmenti** — riprovare, ridurre la pagina o scegliere un modello più capace.
-- **Log** — `make logs` oppure `docker compose logs -f app`.
+- **Batch fermo su “In coda”** — il servizio `queue` non sta elaborando: controllare `docker compose ps`, `make logs-queue` e che `QUEUE_WORKERS` sia almeno `1`. I job restano nel database e ripartono quando il worker torna attivo.
+- **Timeout dei job su modelli locali lenti** — aumentare insieme `AI_REQUEST_TIMEOUT`, `QUEUE_JOB_TIMEOUT` e `DB_QUEUE_RETRY_AFTER` (quest'ultimo sempre maggiore del timeout job), poi `make down && make up`.
+- **Log** — `make logs` per app/Vite, `make logs-queue` per i worker.
 
 ## Licenza
 
