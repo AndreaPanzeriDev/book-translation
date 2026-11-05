@@ -99,3 +99,49 @@ export interface PageDetail {
     blocks: Block[];
     translations: Translation[];
 }
+
+export type TranslationBatchStatus =
+    | 'queued'
+    | 'running'
+    | 'completed'
+    | 'failed'
+    | 'cancelled';
+
+export interface TranslationBatchSlot {
+    slot_key: 'a' | 'b';
+    account_id: number;
+    model: string;
+}
+
+export interface TranslationBatchFailure {
+    item_id: number;
+    page_id: number;
+    page_position: number;
+    slot_key: 'a' | 'b';
+    model: string;
+    message: string;
+}
+
+export interface TranslationBatch {
+    id: number;
+    book_id: number;
+    book_title: string | null;
+    target_language: string;
+    status: TranslationBatchStatus;
+    total: number;
+    processed: number;
+    pending: number;
+    succeeded: number;
+    failed: number;
+    cancelled: number;
+    in_flight: number;
+    current_label: string | null;
+    active_page_ids: number[];
+    failures: TranslationBatchFailure[];
+    can_cancel: boolean;
+    can_retry: boolean;
+    created_at: string | null;
+    started_at: string | null;
+    finished_at: string | null;
+    cancel_requested_at: string | null;
+}

@@ -36,6 +36,30 @@ services:
     tty: true
     stdin_open: true
 
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    entrypoint: ["/usr/local/bin/queue-entrypoint.sh"]
+    environment:
+      QUEUE_WORKERS: ${QUEUE_WORKERS:-4}
+      QUEUE_JOB_TIMEOUT: ${QUEUE_JOB_TIMEOUT:-360}
+      QUEUE_WORKER_MAX_TIME: ${QUEUE_WORKER_MAX_TIME:-3600}
+      QUEUE_WORKER_MAX_JOBS: ${QUEUE_WORKER_MAX_JOBS:-500}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: mariadb:11
     restart: unless-stopped

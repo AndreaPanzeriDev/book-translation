@@ -17,6 +17,37 @@ class TranslationService
         private readonly TranslationPrompt $prompt,
     ) {}
 
+    public function keyHash(
+        Page $page,
+        AiAccount $account,
+        string $model,
+        string $targetLanguage,
+        float $temperature = self::DEFAULT_TEMPERATURE,
+    ): string {
+        return hash('sha256', implode('|', [
+            $page->id,
+            $page->source_hash,
+            $account->id,
+            $model,
+            $targetLanguage,
+            TranslationPrompt::VERSION,
+            $this->paramsHash($temperature),
+        ]));
+    }
+
+    public function findCompleted(
+        Page $page,
+        AiAccount $account,
+        string $model,
+        string $targetLanguage,
+        float $temperature = self::DEFAULT_TEMPERATURE,
+    ): ?Translation {
+        return Translation::query()
+            ->where('key_hash', $this->keyHash($page, $account, $model, $targetLanguage, $temperature))
+            ->where('status', 'completed')
+            ->first();
+    }
+
     public function translate(
         Page $page,
         AiAccount $account,
@@ -30,16 +61,8 @@ class TranslationService
             throw new TranslationException('La pagina non contiene testo da tradurre.');
         }
 
-        $paramsHash = hash('sha256', json_encode(['temperature' => $temperature], JSON_THROW_ON_ERROR));
-        $keyHash = hash('sha256', implode('|', [
-            $page->id,
-            $page->source_hash,
-            $account->id,
-            $model,
-            $targetLanguage,
-            TranslationPrompt::VERSION,
-            $paramsHash,
-        ]));
+        $paramsHash = $this->paramsHash($temperature);
+        $keyHash = $this->keyHash($page, $account, $model, $targetLanguage, $temperature);
 
         $translation = Translation::firstWhere('key_hash', $keyHash);
 
@@ -126,6 +149,11 @@ class TranslationService
 
             throw new TranslationException($e->getMessage(), 0, $e);
         }
+    }
+
+    private function paramsHash(float $temperature): string
+    {
+        return hash('sha256', json_encode(['temperature' => $temperature], JSON_THROW_ON_ERROR));
     }
 
     /**

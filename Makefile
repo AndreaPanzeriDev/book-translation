@@ -2,7 +2,7 @@ SHELL := /bin/bash
 export UID := $(shell id -u)
 export GID := $(shell id -g)
 
-.PHONY: setup up down build logs shell artisan composer npm test lint typecheck
+.PHONY: setup up down build logs logs-queue shell queue-shell artisan composer npm test lint typecheck
 
 setup:
 	./setup.sh
@@ -19,8 +19,14 @@ down:
 logs:
 	docker compose logs -f app
 
+logs-queue:
+	docker compose logs -f queue
+
 shell:
 	docker compose exec app bash
+
+queue-shell:
+	docker compose exec queue bash
 
 artisan:
 	docker compose exec app php artisan $(ARGS)
