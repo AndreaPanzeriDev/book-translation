@@ -13,8 +13,10 @@
         "@inertiajs/react": "^3.10.0",
         "antd": "^6.6.8",
         "axios": "^1.21.0",
+        "i18next": "^26.7.2",
         "react": "^19.3.1",
-        "react-dom": "^19.3.1"
+        "react-dom": "^19.3.1",
+        "react-i18next": "^17.1.13"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

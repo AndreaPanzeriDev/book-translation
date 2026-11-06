@@ -8,6 +8,7 @@ use App\Services\Translation\TranslationBatchService;
 use App\Services\Translation\TranslationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -62,6 +63,10 @@ class ProcessTranslationBatchItem implements ShouldQueue
             return;
         }
 
+        if ($item->batch instanceof TranslationBatch) {
+            App::setLocale($item->batch->locale ?: config('app.locale'));
+        }
+
         if ($item->isTerminal()) {
             // Un secondo tentativo dello stesso job può arrivare dopo che
             // l'item è già stato salvato: allinea lo stato del batch e, se
@@ -102,13 +107,13 @@ class ProcessTranslationBatchItem implements ShouldQueue
         $account = $item->account;
 
         if (! $account) {
-            $batches->markItemFailed($item->id, 'L’account AI associato non esiste più.');
+            $batches->markItemFailed($item->id, __('messages.batches.errors.account_missing'));
 
             return;
         }
 
         if (! $account->is_active) {
-            $batches->markItemFailed($item->id, 'L’account AI è stato disattivato.');
+            $batches->markItemFailed($item->id, __('messages.batches.errors.account_disabled'));
 
             return;
         }
@@ -204,6 +209,10 @@ class ProcessTranslationBatchItem implements ShouldQueue
             return;
         }
 
+        if ($item->batch instanceof TranslationBatch) {
+            App::setLocale($item->batch->locale ?: config('app.locale'));
+        }
+
         $batches = app(TranslationBatchService::class);
 
         if ($item->isTerminal()) {
@@ -219,7 +228,7 @@ class ProcessTranslationBatchItem implements ShouldQueue
 
         $batches->markItemFailed(
             $item->id,
-            $exception?->getMessage() ?: 'Il job di traduzione è stato interrotto più volte.',
+            $exception?->getMessage() ?: __('messages.batches.errors.interrupted'),
         );
     }
 

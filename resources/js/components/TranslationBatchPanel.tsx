@@ -1,22 +1,19 @@
-import {
-    CloseOutlined,
-    ReloadOutlined,
-    StopOutlined,
-} from '@ant-design/icons';
+import { CloseOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
 import { Link } from '@inertiajs/react';
 import { App, Button, Modal, Progress, Tag, Tooltip } from 'antd';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useTranslationBatch } from '@/contexts/TranslationBatchProvider';
 import { errorMessage } from '@/lib/languages';
 import type { TranslationBatch, TranslationBatchFailure } from '@/types';
 
-const STATUS_LABEL: Record<TranslationBatch['status'], string> = {
-    queued: 'In coda',
-    running: 'In corso',
-    completed: 'Completata',
-    failed: 'Con errori',
-    cancelled: 'Interrotta',
+const STATUS_KEY: Record<TranslationBatch['status'], string> = {
+    queued: 'batch.statusQueued',
+    running: 'batch.statusRunning',
+    completed: 'batch.statusCompleted',
+    failed: 'batch.statusFailed',
+    cancelled: 'batch.statusCancelled',
 };
 
 const STATUS_COLOR: Record<TranslationBatch['status'], string> = {
@@ -44,6 +41,7 @@ function progressStatus(batch: TranslationBatch) {
 }
 
 export default function TranslationBatchPanel() {
+    const { t } = useTranslation();
     const { batches, cancelBatch, retryBatch, dismissBatch } = useTranslationBatch();
     const { message } = App.useApp();
     const [detail, setDetail] = useState<TranslationBatchFailure | null>(null);
@@ -58,7 +56,7 @@ export default function TranslationBatchPanel() {
 
         try {
             await cancelBatch(batch.id);
-            void message.info('Interruzione richiesta: le richieste già partite verranno salvate.');
+            void message.info(t('batch.cancelNotification'));
         } catch (error) {
             void message.error(errorMessage(error));
         } finally {
@@ -71,7 +69,7 @@ export default function TranslationBatchPanel() {
 
         try {
             await retryBatch(batch.id);
-            void message.info('Traduzioni fallite rimesse in coda.');
+            void message.info(t('batch.retryNotification'));
         } catch (error) {
             void message.error(errorMessage(error));
         } finally {
@@ -86,8 +84,8 @@ export default function TranslationBatchPanel() {
 
         navigator.clipboard
             .writeText(detail.message)
-            .then(() => message.success('Errore copiato negli appunti.'))
-            .catch(() => message.error('Impossibile copiare l’errore.'));
+            .then(() => message.success(t('batch.copied')))
+            .catch(() => message.error(t('batch.copyFailed')));
     };
 
     return (
@@ -110,24 +108,27 @@ export default function TranslationBatchPanel() {
                                 <div className="mb-2 flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                         <p className="truncate text-sm font-semibold text-ink-900">
-                                            {batch.book_title ?? `Libro #${batch.book_id}`}
+                                            {batch.book_title ??
+                                                t('batch.bookFallback', { id: batch.book_id })}
                                         </p>
                                         <p className="mt-0.5 text-[11px] uppercase tracking-wide text-ink-500">
-                                            Traduzione · {batch.target_language.toUpperCase()}
+                                            {t('batch.translationHeader', {
+                                                language: batch.target_language.toUpperCase(),
+                                            })}
                                         </p>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-1">
                                         <Tag color={STATUS_COLOR[batch.status]}>
-                                            {STATUS_LABEL[batch.status]}
+                                            {t(STATUS_KEY[batch.status])}
                                         </Tag>
                                         {!active && (
-                                            <Tooltip title="Chiudi pannello">
+                                            <Tooltip title={t('batch.closePanel')}>
                                                 <Button
                                                     type="text"
                                                     size="small"
                                                     icon={<CloseOutlined />}
                                                     onClick={() => dismissBatch(batch.id)}
-                                                    aria-label="Chiudi pannello"
+                                                    aria-label={t('batch.closePanel')}
                                                 />
                                             </Tooltip>
                                         )}
@@ -145,23 +146,22 @@ export default function TranslationBatchPanel() {
                                         {batch.processed} / {batch.total}
                                     </span>
                                     <span>
-                                        {batch.succeeded}{' '}
-                                        {batch.succeeded === 1 ? 'riuscita' : 'riuscite'} ·{' '}
-                                        {batch.failed}{' '}
-                                        {batch.failed === 1 ? 'errore' : 'errori'}
-                                        {batch.cancelled > 0 && ` · ${batch.cancelled} annullate`}
+                                        {t('batch.succeeded', { count: batch.succeeded })} ·{' '}
+                                        {t('batch.failed', { count: batch.failed })}
+                                        {batch.cancelled > 0 &&
+                                            ` · ${t('batch.cancelled', { count: batch.cancelled })}`}
                                     </span>
                                 </div>
 
                                 {active && (
                                     <p className="mt-2 truncate text-xs text-ink-700">
                                         {batch.cancel_requested_at
-                                            ? 'Interruzione richiesta: attendo le richieste in corso.'
+                                            ? t('batch.cancelPending')
                                             : batch.in_flight > 1
-                                              ? `${batch.in_flight} richieste in corso`
+                                              ? t('batch.inFlight', { count: batch.in_flight })
                                               : batch.current_label
-                                                ? `In corso: ${batch.current_label}`
-                                                : 'In attesa del worker…'}
+                                                ? t('batch.running', { label: batch.current_label })
+                                                : t('batch.waitingWorker')}
                                     </p>
                                 )}
 
@@ -172,11 +172,14 @@ export default function TranslationBatchPanel() {
                                                 key={failure.item_id}
                                                 type="button"
                                                 className="block w-full cursor-pointer truncate text-left hover:underline"
-                                                title="Clicca per vedere l’errore completo"
+                                                title={t('batch.failureTooltip')}
                                                 onClick={() => setDetail(failure)}
                                             >
                                                 <span className="font-medium">
-                                                    Pagina {failure.page_position} · {failure.model}:
+                                                    {t('batch.failureLabel', {
+                                                        page: failure.page_position,
+                                                        model: failure.model,
+                                                    })}
                                                 </span>{' '}
                                                 {failure.message}
                                             </button>
@@ -194,7 +197,9 @@ export default function TranslationBatchPanel() {
                                             disabled={!batch.can_cancel}
                                             onClick={() => void handleCancel(batch)}
                                         >
-                                            {batch.can_cancel ? 'Interrompi' : 'Interruzione richiesta'}
+                                            {batch.can_cancel
+                                                ? t('batch.cancel')
+                                                : t('batch.cancelRequested')}
                                         </Button>
                                     )}
 
@@ -208,18 +213,18 @@ export default function TranslationBatchPanel() {
                                                     loading={action === 'retry'}
                                                     onClick={() => void handleRetry(batch)}
                                                 >
-                                                    Riprova {batch.failed}
+                                                    {t('batch.retry', { count: batch.failed })}
                                                 </Button>
                                             )}
                                             <Link href={`/books/${batch.book_id}`} className="flex-1">
-                                                <Button block>Apri libro</Button>
+                                                <Button block>{t('batch.openBook')}</Button>
                                             </Link>
                                             <Button
                                                 block
                                                 className="flex-1"
                                                 onClick={() => dismissBatch(batch.id)}
                                             >
-                                                Chiudi
+                                                {t('common.close')}
                                             </Button>
                                         </>
                                     )}
@@ -232,16 +237,21 @@ export default function TranslationBatchPanel() {
 
             <Modal
                 title={
-                    detail ? `Pagina ${detail.page_position} · ${detail.model}` : 'Dettaglio errore'
+                    detail
+                        ? t('batch.detailTitle', {
+                              page: detail.page_position,
+                              model: detail.model,
+                          })
+                        : t('batch.detailFallbackTitle')
                 }
                 open={detail !== null}
                 onCancel={() => setDetail(null)}
                 footer={[
                     <Button key="copy" onClick={copyDetail}>
-                        Copia
+                        {t('common.copy')}
                     </Button>,
                     <Button key="close" type="primary" onClick={() => setDetail(null)}>
-                        Chiudi
+                        {t('common.close')}
                     </Button>,
                 ]}
                 width={640}

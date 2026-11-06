@@ -36,16 +36,13 @@ class BookController extends Controller
     {
         $request->validate([
             'file' => ['required', 'file', 'max:65536'],
-        ], [
-            'file.required' => 'Seleziona un file EPUB.',
-            'file.max' => 'Il file supera il limite di 64 MB.',
         ]);
 
         $file = $request->file('file');
 
         if (strtolower($file->getClientOriginalExtension()) !== 'epub') {
             throw ValidationException::withMessages([
-                'file' => 'Il file deve avere estensione .epub.',
+                'file' => __('messages.books.invalid_extension'),
             ]);
         }
 
@@ -57,13 +54,13 @@ class BookController extends Controller
             report($e);
 
             throw ValidationException::withMessages([
-                'file' => 'Impossibile leggere l’EPUB. Verifica che sia un file valido e senza DRM.',
+                'file' => __('messages.books.import_failed'),
             ]);
         }
 
         return redirect()
             ->route('books.show', $book)
-            ->with('success', 'Libro importato: '.$book->title.'.');
+            ->with('success', __('messages.books.imported', ['title' => $book->title]));
     }
 
     public function show(Book $book): Response
@@ -108,10 +105,6 @@ class BookController extends Controller
     {
         $data = $request->validate([
             'target_language' => ['required', 'string', 'max:16'],
-        ], [
-            'target_language.required' => 'Seleziona una lingua di destinazione.',
-            'target_language.string' => 'La lingua di destinazione non è valida.',
-            'target_language.max' => 'La lingua di destinazione non è valida.',
         ]);
 
         $book->update(['target_language' => $data['target_language']]);
@@ -132,6 +125,6 @@ class BookController extends Controller
 
         return redirect()
             ->route('library')
-            ->with('success', 'Libro eliminato: '.$title.'.');
+            ->with('success', __('messages.books.deleted', ['title' => $title]));
     }
 }

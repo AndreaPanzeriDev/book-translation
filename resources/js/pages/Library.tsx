@@ -3,6 +3,7 @@ import { Link, router } from '@inertiajs/react';
 import { Alert, App, Button, Popconfirm, Tag, Upload } from 'antd';
 import type { UploadFile } from 'antd';
 import { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import AppLayout from '@/layouts/AppLayout';
 import { languageLabel } from '@/lib/languages';
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function Library({ books, accountsCount }: Props) {
+    const { t } = useTranslation();
     const { message } = App.useApp();
     const [file, setFile] = useState<File | null>(null);
     const [fileList, setFileList] = useState<UploadFile[]>([]);
@@ -44,7 +46,9 @@ export default function Library({ books, accountsCount }: Props) {
                     setProgress(0);
                 },
                 onError: (errors) => {
-                    void message.error(Object.values(errors)[0] ?? 'Importazione non riuscita.');
+                    void message.error(
+                        Object.values(errors)[0] ?? t('library.importFailed'),
+                    );
                 },
                 onFinish: () => setUploading(false),
             },
@@ -57,34 +61,32 @@ export default function Library({ books, accountsCount }: Props) {
                 <div className="grid gap-8 lg:grid-cols-[1.25fr_1fr] lg:items-center">
                     <div>
                         <Tag color="gold" className="mb-3">
-                            Traduzione e confronto affiancato
+                            {t('library.heroBadge')}
                         </Tag>
                         <h1 className="max-w-2xl font-reading text-3xl leading-tight text-ink-900 md:text-4xl">
-                            Leggi l’originale accanto a una o due traduzioni. Scegli con i tuoi occhi.
+                            {t('library.heroTitle')}
                         </h1>
                         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-700 md:text-base">
-                            Carica un EPUB, seleziona pagine, capitoli o l’intero libro e confronta i
-                            risultati di account e modelli diversi. Le traduzioni già ottenute restano in
-                            cache e si riaprono all’istante.
+                            {t('library.heroDescription')}
                         </p>
 
                         <div className="mt-5 flex flex-wrap gap-3">
                             <div className="rounded-lg border border-parchment-200 bg-white/80 px-4 py-3">
                                 <div className="text-2xl font-semibold text-ink-900">{books.length}</div>
                                 <div className="text-xs uppercase tracking-wide text-ink-500">
-                                    {books.length === 1 ? 'Libro' : 'Libri'}
+                                    {t('common.books', { count: books.length })}
                                 </div>
                             </div>
                             <div className="rounded-lg border border-parchment-200 bg-white/80 px-4 py-3">
                                 <div className="text-2xl font-semibold text-ink-900">{totalPages}</div>
                                 <div className="text-xs uppercase tracking-wide text-ink-500">
-                                    {totalPages === 1 ? 'Pagina virtuale' : 'Pagine virtuali'}
+                                    {t('common.virtualPages', { count: totalPages })}
                                 </div>
                             </div>
                             <div className="rounded-lg border border-parchment-200 bg-white/80 px-4 py-3">
                                 <div className="text-2xl font-semibold text-ink-900">{accountsCount}</div>
                                 <div className="text-xs uppercase tracking-wide text-ink-500">
-                                    {accountsCount === 1 ? 'Account attivo' : 'Account attivi'}
+                                    {t('common.activeAccounts', { count: accountsCount })}
                                 </div>
                             </div>
                         </div>
@@ -93,9 +95,11 @@ export default function Library({ books, accountsCount }: Props) {
                     <div className="rounded-xl border border-parchment-200 bg-white/85 p-4 shadow-sm">
                         <div className="mb-3 flex items-center justify-between gap-2">
                             <div>
-                                <h2 className="text-base font-semibold text-ink-900">Importa un EPUB</h2>
+                                <h2 className="text-base font-semibold text-ink-900">
+                                    {t('library.importTitle')}
+                                </h2>
                                 <p className="text-xs text-ink-500">
-                                    Il testo viene diviso in pagine virtuali da circa 1.500 caratteri.
+                                    {t('library.importDescription')}
                                 </p>
                             </div>
                             <ReadOutlined className="text-xl text-leather-600" />
@@ -127,14 +131,14 @@ export default function Library({ books, accountsCount }: Props) {
                             <p className="ant-upload-drag-icon">
                                 <InboxOutlined className="text-leather-600!" />
                             </p>
-                            <p className="ant-upload-text">Trascina qui il file .epub</p>
-                            <p className="ant-upload-hint">Oppure fai clic per sceglierlo · max 64 MB</p>
+                            <p className="ant-upload-text">{t('library.importDrag')}</p>
+                            <p className="ant-upload-hint">{t('library.importHint')}</p>
                         </Dragger>
 
                         {uploading && (
                             <div className="mt-3">
                                 <div className="mb-1 flex justify-between text-xs text-ink-500">
-                                    <span>Importazione in corso…</span>
+                                    <span>{t('library.importing')}</span>
                                     <span>{progress}%</span>
                                 </div>
                                 <div className="h-1.5 overflow-hidden rounded-full bg-parchment-200">
@@ -156,7 +160,7 @@ export default function Library({ books, accountsCount }: Props) {
                             loading={uploading}
                             onClick={importBook}
                         >
-                            Importa e apri lo studio
+                            {t('library.importSubmit')}
                         </Button>
 
                         {accountsCount === 0 && (
@@ -164,12 +168,12 @@ export default function Library({ books, accountsCount }: Props) {
                                 className="mt-3"
                                 type="warning"
                                 showIcon
-                                title="Nessun account AI attivo"
+                                title={t('library.noAccountsTitle')}
                                 description={
-                                    <span>
-                                        <Link href="/accounts">Configura un account</Link> per poter
-                                        tradurre i libri.
-                                    </span>
+                                    <Trans
+                                        i18nKey="library.noAccountsDescription"
+                                        components={{ link: <Link href="/accounts" /> }}
+                                    />
                                 }
                             />
                         )}
@@ -180,11 +184,11 @@ export default function Library({ books, accountsCount }: Props) {
             <section>
                 <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
                     <div>
-                        <h2 className="text-xl font-semibold text-ink-900">La tua libreria</h2>
+                        <h2 className="text-xl font-semibold text-ink-900">{t('library.title')}</h2>
                         <p className="text-sm text-ink-500">
                             {books.length === 0
-                                ? 'Nessun libro importato finora.'
-                                : `${books.length} ${books.length === 1 ? 'libro pronto' : 'libri pronti'} da tradurre e confrontare.`}
+                                ? t('library.emptyDescription')
+                                : t('library.ready', { count: books.length })}
                         </p>
                     </div>
                 </div>
@@ -192,10 +196,11 @@ export default function Library({ books, accountsCount }: Props) {
                 {books.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-parchment-300 bg-white/60 px-6 py-16 text-center">
                         <ReadOutlined className="text-4xl text-parchment-300" />
-                        <h3 className="mt-4 text-lg font-medium text-ink-700">La libreria è vuota</h3>
+                        <h3 className="mt-4 text-lg font-medium text-ink-700">
+                            {t('library.emptyTitle')}
+                        </h3>
                         <p className="mx-auto mt-1 max-w-md text-sm text-ink-500">
-                            Importa il tuo primo EPUB per iniziare. L’originale resterà sempre visibile
-                            accanto alle traduzioni.
+                            {t('library.emptyHint')}
                         </p>
                     </div>
                 ) : (
@@ -209,7 +214,7 @@ export default function Library({ books, accountsCount }: Props) {
                                     {book.cover_url ? (
                                         <img
                                             src={book.cover_url}
-                                            alt={`Copertina di ${book.title}`}
+                                            alt={t('library.coverAlt', { title: book.title })}
                                             className="h-full w-full object-cover"
                                             loading="lazy"
                                         />
@@ -231,19 +236,17 @@ export default function Library({ books, accountsCount }: Props) {
                                         {book.title}
                                     </h3>
                                     <p className="mt-0.5 line-clamp-1 text-sm text-ink-500">
-                                        {book.author ?? 'Autore sconosciuto'}
+                                        {book.author ?? t('common.authorUnknown')}
                                     </p>
 
                                     <div className="mt-3 flex flex-wrap gap-1.5">
                                         <Tag>
-                                            {book.chapters_count}{' '}
-                                            {book.chapters_count === 1 ? 'capitolo' : 'capitoli'}
+                                            {t('common.chapters', { count: book.chapters_count })}
                                         </Tag>
-                                        <Tag>
-                                            {book.pages_count}{' '}
-                                            {book.pages_count === 1 ? 'pagina' : 'pagine'}
+                                        <Tag>{t('common.pages', { count: book.pages_count })}</Tag>
+                                        <Tag color="gold">
+                                            → {languageLabel(book.target_language)}
                                         </Tag>
-                                        <Tag color="gold">→ {languageLabel(book.target_language)}</Tag>
                                     </div>
 
                                     <div className="mt-auto flex items-center gap-2 pt-4">
@@ -252,19 +255,23 @@ export default function Library({ books, accountsCount }: Props) {
                                             block
                                             onClick={() => router.visit(`/books/${book.id}`)}
                                         >
-                                            Apri studio
+                                            {t('library.open')}
                                         </Button>
                                         <Popconfirm
-                                            title="Eliminare questo libro?"
-                                            description="Capitoli, pagine e traduzioni collegate verranno rimossi."
-                                            okText="Elimina"
-                                            cancelText="Annulla"
+                                            title={t('library.deleteTitle')}
+                                            description={t('library.deleteDescription')}
+                                            okText={t('common.delete')}
+                                            cancelText={t('common.cancel')}
                                             okButtonProps={{ danger: true }}
                                             onConfirm={() =>
                                                 router.delete(`/books/${book.id}`, { preserveScroll: true })
                                             }
                                         >
-                                            <Button danger icon={<DeleteOutlined />} aria-label="Elimina libro" />
+                                            <Button
+                                                danger
+                                                icon={<DeleteOutlined />}
+                                                aria-label={t('library.deleteAria')}
+                                            />
                                         </Popconfirm>
                                     </div>
                                 </div>

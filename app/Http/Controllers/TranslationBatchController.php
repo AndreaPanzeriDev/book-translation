@@ -67,7 +67,7 @@ class TranslationBatchController extends Controller
 
         if ($activeAccountIds->count() !== $accountIds->count()) {
             return response()->json([
-                'message' => 'Uno o più account selezionati non sono attivi.',
+                'message' => __('messages.accounts.some_inactive'),
             ], 422);
         }
 

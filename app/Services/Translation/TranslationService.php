@@ -58,7 +58,7 @@ class TranslationService
         $blocks = $page->blocks()->get();
 
         if ($blocks->isEmpty()) {
-            throw new TranslationException('La pagina non contiene testo da tradurre.');
+            throw new TranslationException(__('messages.translation.empty_page'));
         }
 
         $paramsHash = $this->paramsHash($temperature);
@@ -101,15 +101,14 @@ class TranslationService
             $expectedIds = range(1, $blocks->count());
 
             if (count($map) !== $blocks->count()) {
-                throw new TranslationException(sprintf(
-                    'Il modello ha restituito %d segmenti invece di %d. Riprova o cambia modello.',
-                    count($map),
-                    $blocks->count(),
-                ));
+                throw new TranslationException(__('messages.translation.invalid_segment_count', [
+                    'actual' => count($map),
+                    'expected' => $blocks->count(),
+                ]));
             }
 
             if (array_keys($map) !== $expectedIds) {
-                throw new TranslationException('Il modello ha restituito id mancanti, duplicati o non validi. Riprova o cambia modello.');
+                throw new TranslationException(__('messages.translation.invalid_segment_ids'));
             }
 
             $translated = [];
@@ -118,7 +117,7 @@ class TranslationService
                 $text = $map[$index + 1] ?? null;
 
                 if ($text === null) {
-                    throw new TranslationException('Il modello ha omesso uno o più segmenti.');
+                    throw new TranslationException(__('messages.translation.missing_segment'));
                 }
 
                 $translated[] = ['block_id' => $block->id, 'text' => trim($text)];
@@ -179,13 +178,13 @@ class TranslationService
         }
 
         if (! is_array($decoded)) {
-            throw new TranslationException('Il modello non ha restituito un JSON valido.');
+            throw new TranslationException(__('messages.translation.invalid_json'));
         }
 
         $items = $decoded['translations'] ?? $decoded;
 
         if (! is_array($items)) {
-            throw new TranslationException('La risposta del modello non contiene l’elenco delle traduzioni.');
+            throw new TranslationException(__('messages.translation.missing_translations'));
         }
 
         $map = [];

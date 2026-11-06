@@ -21,6 +21,7 @@ class TranslationBatch extends Model
     protected $fillable = [
         'book_id',
         'target_language',
+        'locale',
         'status',
         'total_items',
         'cancel_requested_at',
@@ -99,7 +100,7 @@ class TranslationBatch extends Model
                 'page_position' => $item->page_position,
                 'slot_key' => $item->slot_key,
                 'model' => $item->model,
-                'message' => $item->error ?? 'Errore sconosciuto.',
+                'message' => $item->error ?? __('messages.batches.errors.unknown'),
             ])
             ->values()
             ->all();
@@ -118,7 +119,10 @@ class TranslationBatch extends Model
             'cancelled' => $cancelled,
             'in_flight' => $running,
             'current_label' => $current
-                ? sprintf('Pagina %d · %s', $current->page_position, $current->model)
+                ? __('messages.batches.current_label', [
+                    'page' => $current->page_position,
+                    'model' => $current->model,
+                ])
                 : null,
             'active_page_ids' => $activePageIds,
             'failures' => $failures,

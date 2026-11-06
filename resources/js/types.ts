@@ -8,6 +8,8 @@ export interface Flash {
 export interface SharedProps extends PageProps {
     flash?: Flash;
     appName?: string;
+    locale?: string;
+    availableLocales?: string[];
 }
 
 export interface BookSummary {

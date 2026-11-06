@@ -714,3 +714,39 @@ it('valida account attivi, pagine del libro e massimo due slot', function () {
         ->assertUnprocessable()
         ->assertJsonPath('message', 'Uno o più account selezionati non sono attivi.');
 });
+
+it('salva la lingua corrente sul batch', function () {
+    Queue::fake();
+    [$book, $pages, $account] = makeBatchFixture(1, 'serial');
+
+    $this->withHeader('Accept-Language', 'en-US,en;q=0.9')
+        ->postJson(route('translation-batches.store', $book), batchPayload($pages, $account))
+        ->assertCreated();
+
+    expect(TranslationBatch::firstOrFail()->locale)->toBe('en');
+});
+
+it('usa la lingua salvata sul batch per gli errori dei job', function () {
+    Http::fake();
+    [$book, $pages, $account] = makeBatchFixture(1, 'serial');
+    $account->update(['is_active' => false]);
+
+    $batch = TranslationBatch::create([
+        'book_id' => $book->id,
+        'target_language' => 'it',
+        'locale' => 'en',
+        'status' => 'queued',
+        'total_items' => 1,
+    ]);
+    $item = makeBatchItem($batch, $pages[0], $account);
+
+    (new ProcessTranslationBatchItem($item->id))->handle(
+        app(TranslationService::class),
+        app(TranslationBatchService::class),
+    );
+
+    expect($item->fresh()->status)->toBe('failed')
+        ->and($item->fresh()->error)->toBe('The AI account has been disabled.');
+
+    Http::assertNothingSent();
+});

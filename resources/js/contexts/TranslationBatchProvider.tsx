@@ -10,6 +10,7 @@ import {
     useState,
     type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { TranslationBatch, TranslationBatchSlot } from '@/types';
 
@@ -46,6 +47,7 @@ function isActiveStatus(status: TranslationBatch['status']): boolean {
 }
 
 export function TranslationBatchProvider({ children }: { children: ReactNode }) {
+    const { t } = useTranslation();
     const { message } = App.useApp();
     const [batchesById, setBatchesById] = useState<Record<number, TranslationBatch>>({});
     const knownStatuses = useRef<Record<number, TranslationBatch['status']>>({});
@@ -112,26 +114,28 @@ export function TranslationBatchProvider({ children }: { children: ReactNode }) 
             const terminal = !isActiveStatus(batch.status);
 
             if (previous && isActiveStatus(previous) && terminal) {
-                const book = batch.book_title ?? 'Libro';
+                const book = batch.book_title ?? t('batch.libro');
 
                 if (batch.status === 'completed') {
                     void message.success(
-                        `${book}: traduzione completata (${batch.succeeded} ${
-                            batch.succeeded === 1 ? 'pagina' : 'pagine'
-                        }).`,
+                        t('batch.notificationCompleted', {
+                            book,
+                            count: batch.succeeded,
+                        }),
                     );
                 } else if (batch.status === 'failed') {
                     void message.warning(
-                        `${book}: ${batch.failed} ${
-                            batch.failed === 1 ? 'traduzione non riuscita' : 'traduzioni non riuscite'
-                        }. Controlla il pannello.`,
+                        t('batch.notificationFailed', {
+                            book,
+                            count: batch.failed,
+                        }),
                     );
                 }
             }
 
             knownStatuses.current[batch.id] = batch.status;
         }
-    }, [batches, message]);
+    }, [batches, message, t]);
 
     const activeKey = useMemo(
         () =>

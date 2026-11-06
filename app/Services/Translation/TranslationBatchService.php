@@ -33,7 +33,7 @@ class TranslationBatchService
 
             if ($hasActiveBatch) {
                 throw new TranslationBatchException(
-                    'C’è già una traduzione in corso per questo libro. Attendi o interrompila.',
+                    __('messages.batches.already_active'),
                     409,
                 );
             }
@@ -115,13 +115,14 @@ class TranslationBatchService
             if ($items === []) {
                 return [
                     'batch' => null,
-                    'message' => 'Tutte le traduzioni richieste sono già in cache.',
+                    'message' => __('messages.batches.all_cached'),
                 ];
             }
 
             $batch = TranslationBatch::create([
                 'book_id' => $lockedBook->id,
                 'target_language' => $targetLanguage,
+                'locale' => app()->getLocale(),
                 'status' => TranslationBatch::STATUS_QUEUED,
                 'total_items' => count($items),
             ]);
@@ -173,7 +174,7 @@ class TranslationBatchService
                 ->where('status', TranslationBatchItem::STATUS_PENDING)
                 ->update([
                     'status' => TranslationBatchItem::STATUS_CANCELLED,
-                    'error' => 'Annullata prima dell’esecuzione.',
+                    'error' => __('messages.batches.errors.cancelled'),
                     'finished_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -193,7 +194,7 @@ class TranslationBatchService
             $locked = TranslationBatch::query()->whereKey($batch->id)->lockForUpdate()->firstOrFail();
 
             if ($locked->isActive()) {
-                throw new TranslationBatchException('La traduzione è ancora in corso.', 409);
+                throw new TranslationBatchException(__('messages.batches.still_running'), 409);
             }
 
             $hasOtherActiveBatch = TranslationBatch::query()
@@ -204,7 +205,7 @@ class TranslationBatchService
 
             if ($hasOtherActiveBatch) {
                 throw new TranslationBatchException(
-                    'C’è già un’altra traduzione in corso per questo libro. Attendi o interrompila.',
+                    __('messages.batches.already_active_other'),
                     409,
                 );
             }
@@ -214,7 +215,7 @@ class TranslationBatchService
                 ->pluck('id');
 
             if ($failedIds->isEmpty()) {
-                throw new TranslationBatchException('Non ci sono traduzioni fallite da riprovare.');
+                throw new TranslationBatchException(__('messages.batches.nothing_to_retry'));
             }
 
             $locked->items()
@@ -320,7 +321,7 @@ class TranslationBatchService
 
         $item->forceFill([
             'status' => TranslationBatchItem::STATUS_CANCELLED,
-            'error' => 'Annullata prima dell’esecuzione.',
+            'error' => __('messages.batches.errors.cancelled'),
             'finished_at' => now(),
         ])->save();
 

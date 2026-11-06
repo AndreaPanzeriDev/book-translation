@@ -12,6 +12,7 @@ import {
 import { router } from '@inertiajs/react';
 import { Alert, Button, Form, Input, Modal, Popconfirm, Radio, Select, Switch, Tag, Tooltip } from 'antd';
 import { useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import AppLayout from '@/layouts/AppLayout';
 import { PROVIDER_PRESETS, providerLabel } from '@/lib/languages';
@@ -32,12 +33,8 @@ interface FormValues {
     [key: string]: string | boolean | undefined;
 }
 
-const REQUEST_MODE_LABELS: Record<RequestMode, string> = {
-    serial: 'In serie',
-    parallel: 'In parallelo',
-};
-
 export default function Accounts({ accounts }: Props) {
+    const { t } = useTranslation();
     const [form] = Form.useForm<FormValues>();
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState<AiAccount | null>(null);
@@ -122,14 +119,13 @@ export default function Accounts({ accounts }: Props) {
         <AppLayout>
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
-                    <h1 className="font-reading text-3xl text-ink-900">Account AI</h1>
+                    <h1 className="font-reading text-3xl text-ink-900">{t('accounts.title')}</h1>
                     <p className="mt-1 max-w-2xl text-sm text-ink-500">
-                        Collega OpenAI, OpenRouter, Ollama o qualsiasi server compatibile con l’API
-                        OpenAI. Puoi tenere più account attivi e confrontarli nella stessa pagina.
+                        {t('accounts.description')}
                     </p>
                 </div>
                 <Button type="primary" size="large" icon={<PlusOutlined />} onClick={openCreate}>
-                    Nuovo account
+                    {t('accounts.new')}
                 </Button>
             </div>
 
@@ -137,23 +133,28 @@ export default function Accounts({ accounts }: Props) {
                 className="mb-5"
                 type="info"
                 showIcon
-                title={`${activeCount} ${activeCount === 1 ? 'account attivo' : 'account attivi'} · ${accounts.length} ${accounts.length === 1 ? 'configurato' : 'configurati'}`}
-                description="Le chiavi API vengono cifrate con la chiave dell’applicazione e non vengono mai inviate al browser. Alla creazione l’elenco dei modelli viene importato automaticamente; usa “Sincronizza modelli” per aggiornarlo in seguito. Ogni account può tradurre le pagine in serie o in parallelo."
+                title={`${t('accounts.summaryActive', { count: activeCount })} · ${t('accounts.summaryConfigured', { count: accounts.length })}`}
+                description={t('accounts.alertDescription')}
             />
 
             {accounts.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-parchment-300 bg-white/60 px-6 py-16 text-center">
                     <CloudServerOutlined className="text-4xl text-parchment-300" />
-                    <h3 className="mt-4 text-lg font-medium text-ink-700">Nessun account configurato</h3>
+                    <h3 className="mt-4 text-lg font-medium text-ink-700">
+                        {t('accounts.emptyTitle')}
+                    </h3>
                     <p className="mx-auto mt-1 max-w-md text-sm text-ink-500">
-                        Aggiungi un provider per iniziare a tradurre. Per Ollama locale usa
-                        <code className="mx-1 rounded bg-parchment-100 px-1.5 py-0.5 text-xs">
-                            http://host.docker.internal:11434/v1
-                        </code>
-                        e lascia vuota la chiave.
+                        <Trans
+                            i18nKey="accounts.emptyDescription"
+                            components={{
+                                code: (
+                                    <code className="mx-1 rounded bg-parchment-100 px-1.5 py-0.5 text-xs" />
+                                ),
+                            }}
+                        />
                     </p>
                     <Button type="primary" className="mt-4" icon={<PlusOutlined />} onClick={openCreate}>
-                        Configura il primo account
+                        {t('accounts.emptyCta')}
                     </Button>
                 </div>
             ) : (
@@ -180,10 +181,16 @@ export default function Accounts({ accounts }: Props) {
                                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                                 <Tag>{providerLabel(account.provider)}</Tag>
                                                 <Tag color={account.is_active ? 'green' : 'default'}>
-                                                    {account.is_active ? 'Attivo' : 'Disattivato'}
+                                                    {account.is_active
+                                                        ? t('accounts.statusActive')
+                                                        : t('accounts.statusInactive')}
                                                 </Tag>
                                                 <Tag
-                                                    color={account.request_mode === 'parallel' ? 'blue' : 'default'}
+                                                    color={
+                                                        account.request_mode === 'parallel'
+                                                            ? 'blue'
+                                                            : 'default'
+                                                    }
                                                     icon={
                                                         account.request_mode === 'parallel' ? (
                                                             <ThunderboltOutlined />
@@ -193,15 +200,15 @@ export default function Accounts({ accounts }: Props) {
                                                     }
                                                 >
                                                     {account.request_mode === 'parallel'
-                                                        ? REQUEST_MODE_LABELS.parallel
-                                                        : REQUEST_MODE_LABELS.serial}
+                                                        ? t('accounts.modeParallel')
+                                                        : t('accounts.modeSerial')}
                                                 </Tag>
                                                 {account.has_api_key ? (
                                                     <Tag icon={<KeyOutlined />} color="gold">
-                                                        Chiave salvata
+                                                        {t('accounts.keySaved')}
                                                     </Tag>
                                                 ) : (
-                                                    <Tag>Nessuna chiave</Tag>
+                                                    <Tag>{t('accounts.keyMissing')}</Tag>
                                                 )}
                                             </div>
                                         </div>
@@ -211,31 +218,33 @@ export default function Accounts({ accounts }: Props) {
                                 <dl className="mt-4 space-y-2 text-sm">
                                     <div>
                                         <dt className="text-xs uppercase tracking-wide text-ink-500">
-                                            Endpoint
+                                            {t('accounts.endpoint')}
                                         </dt>
-                                        <dd className="truncate font-mono text-xs text-ink-700" title={account.base_url}>
+                                        <dd
+                                            className="truncate font-mono text-xs text-ink-700"
+                                            title={account.base_url}
+                                        >
                                             {account.base_url}
                                         </dd>
                                     </div>
                                     <div>
                                         <dt className="text-xs uppercase tracking-wide text-ink-500">
-                                            Modello predefinito
+                                            {t('accounts.defaultModel')}
                                         </dt>
                                         <dd className="text-ink-700">
-                                            {account.default_model ?? 'Non impostato'}
+                                            {account.default_model ?? t('accounts.notSet')}
                                         </dd>
                                     </div>
                                 </dl>
 
                                 <div className="mt-4">
                                     <div className="mb-1.5 flex items-center justify-between text-xs text-ink-500">
-                                        <span>Modelli disponibili</span>
+                                        <span>{t('accounts.modelsAvailable')}</span>
                                         <span>{account.models.length}</span>
                                     </div>
                                     {account.models.length === 0 ? (
                                         <p className="rounded-md bg-parchment-100/70 px-2.5 py-2 text-xs text-ink-500">
-                                            Nessun modello importato. Usa “Sincronizza modelli” oppure
-                                            digita un modello nello studio.
+                                            {t('accounts.modelsEmpty')}
                                         </p>
                                     ) : (
                                         <div className="flex flex-wrap gap-1">
@@ -258,7 +267,7 @@ export default function Accounts({ accounts }: Props) {
                                         loading={busy === 'sync'}
                                         onClick={() => runAction(account, 'sync')}
                                     >
-                                        Sincronizza modelli
+                                        {t('accounts.syncModels')}
                                     </Button>
                                     <Button
                                         size="small"
@@ -266,21 +275,21 @@ export default function Accounts({ accounts }: Props) {
                                         loading={busy === 'test'}
                                         onClick={() => runAction(account, 'test')}
                                     >
-                                        Verifica
+                                        {t('accounts.test')}
                                     </Button>
                                     <div className="ml-auto flex items-center gap-1">
                                         <Button
                                             size="small"
                                             type="text"
                                             icon={<EditOutlined />}
-                                            aria-label="Modifica account"
+                                            aria-label={t('accounts.editAria')}
                                             onClick={() => openEdit(account)}
                                         />
                                         <Popconfirm
-                                            title="Eliminare questo account?"
-                                            description="Le traduzioni già salvate restano archiviate, ma non saranno più confrontabili senza l’account."
-                                            okText="Elimina"
-                                            cancelText="Annulla"
+                                            title={t('accounts.deleteTitle')}
+                                            description={t('accounts.deleteDescription')}
+                                            okText={t('common.delete')}
+                                            cancelText={t('common.cancel')}
                                             okButtonProps={{ danger: true }}
                                             onConfirm={() =>
                                                 router.delete(`/accounts/${account.id}`, {
@@ -293,7 +302,7 @@ export default function Accounts({ accounts }: Props) {
                                                 type="text"
                                                 danger
                                                 icon={<DeleteOutlined />}
-                                                aria-label="Elimina account"
+                                                aria-label={t('accounts.deleteAria')}
                                             />
                                         </Popconfirm>
                                     </div>
@@ -305,15 +314,15 @@ export default function Accounts({ accounts }: Props) {
             )}
 
             <Modal
-                title={editing ? 'Modifica account' : 'Nuovo account AI'}
+                title={editing ? t('accounts.modalEditTitle') : t('accounts.modalCreateTitle')}
                 open={open}
                 onCancel={() => {
                     setOpen(false);
                     setEditing(null);
                 }}
                 onOk={() => form.submit()}
-                okText="Salva"
-                cancelText="Annulla"
+                okText={t('common.save')}
+                cancelText={t('common.cancel')}
                 confirmLoading={saving}
                 width={560}
             >
@@ -326,20 +335,26 @@ export default function Accounts({ accounts }: Props) {
                 >
                     <Form.Item
                         name="name"
-                        label="Nome"
-                        rules={[{ required: true, message: 'Inserisci un nome.' }]}
+                        label={t('accounts.form.nameLabel')}
+                        rules={[{ required: true, message: t('accounts.form.nameRequired') }]}
                     >
-                        <Input placeholder="Es. OpenAI principale, Ollama locale…" />
+                        <Input placeholder={t('accounts.form.namePlaceholder')} />
                     </Form.Item>
 
-                    <Form.Item name="provider" label="Provider" rules={[{ required: true }]}>
+                    <Form.Item
+                        name="provider"
+                        label={t('accounts.form.providerLabel')}
+                        rules={[{ required: true }]}
+                    >
                         <Select
                             options={PROVIDER_PRESETS.map((preset) => ({
                                 value: preset.value,
-                                label: preset.label,
+                                label: providerLabel(preset.value),
                             }))}
                             onChange={(provider: string) => {
-                                const preset = PROVIDER_PRESETS.find((item) => item.value === provider);
+                                const preset = PROVIDER_PRESETS.find(
+                                    (item) => item.value === provider,
+                                );
 
                                 if (preset?.baseUrl) {
                                     form.setFieldValue('base_url', preset.baseUrl);
@@ -350,48 +365,62 @@ export default function Accounts({ accounts }: Props) {
 
                     <Form.Item
                         name="base_url"
-                        label="URL di base (endpoint compatibile OpenAI)"
+                        label={t('accounts.form.baseUrlLabel')}
                         rules={[
-                            { required: true, message: 'Inserisci l’URL di base.' },
-                            { type: 'url', message: 'URL non valido.' },
+                            { required: true, message: t('accounts.form.baseUrlRequired') },
+                            { type: 'url', message: t('accounts.form.baseUrlInvalid') },
                         ]}
-                        extra="Deve includere /v1, ad esempio https://api.openai.com/v1"
+                        extra={t('accounts.form.baseUrlExtra')}
                     >
                         <Input placeholder="https://api.openai.com/v1" />
                     </Form.Item>
 
                     <Form.Item
                         name="api_key"
-                        label="Chiave API"
+                        label={t('accounts.form.apiKeyLabel')}
                         extra={
                             editing?.has_api_key
-                                ? 'Lascia vuoto per mantenere la chiave attuale.'
-                                : 'Per Ollama locale o server senza autenticazione puoi lasciare vuoto.'
+                                ? t('accounts.form.apiKeyExtraSaved')
+                                : t('accounts.form.apiKeyExtraNew')
                         }
                     >
                         <Input.Password
-                            placeholder={editing?.has_api_key ? '•••••••• (salvata)' : 'sk-…'}
+                            placeholder={
+                                editing?.has_api_key
+                                    ? t('accounts.form.apiKeyPlaceholderSaved')
+                                    : t('accounts.form.apiKeyPlaceholderNew')
+                            }
                             autoComplete="new-password"
                         />
                     </Form.Item>
 
-                    <Form.Item name="default_model" label="Modello predefinito">
-                        <Input placeholder="Es. gpt-4o-mini, openai/gpt-4o-mini, llama3.1:8b" />
+                    <Form.Item
+                        name="default_model"
+                        label={t('accounts.form.defaultModelLabel')}
+                    >
+                        <Input placeholder={t('accounts.form.defaultModelPlaceholder')} />
                     </Form.Item>
 
                     <Form.Item
                         name="request_mode"
-                        label="Modalità richieste"
-                        extra="Vale quando traduci più pagine insieme: in serie una richiesta alla volta, in parallelo tutte le pagine selezionate insieme. Con due colonne ogni account segue la propria modalità. In parallelo il provider può applicare limiti di frequenza."
+                        label={t('accounts.form.requestModeLabel')}
+                        extra={t('accounts.form.requestModeExtra')}
                     >
                         <Radio.Group>
-                            <Radio value="serial">In serie</Radio>
-                            <Radio value="parallel">In parallelo</Radio>
+                            <Radio value="serial">{t('accounts.modeSerial')}</Radio>
+                            <Radio value="parallel">{t('accounts.modeParallel')}</Radio>
                         </Radio.Group>
                     </Form.Item>
 
-                    <Form.Item name="is_active" label="Account attivo" valuePropName="checked">
-                        <Switch checkedChildren="Sì" unCheckedChildren="No" />
+                    <Form.Item
+                        name="is_active"
+                        label={t('accounts.form.isActiveLabel')}
+                        valuePropName="checked"
+                    >
+                        <Switch
+                            checkedChildren={t('accounts.form.yes')}
+                            unCheckedChildren={t('accounts.form.no')}
+                        />
                     </Form.Item>
 
                     <Button htmlType="submit" className="hidden" />

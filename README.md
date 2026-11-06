@@ -17,7 +17,7 @@ Lo stack è **Laravel 13 + Inertia 3 + React 19 + TypeScript + Tailwind CSS 4 + 
 - Allineamento a livello di frase: selezionando una o più frasi nell'originale, le frasi corrispondenti si evidenziano automaticamente in tutte le traduzioni visibili, anche quelle già in cache.
 - Chiavi API cifrate nel database e mai serializzate verso il browser.
 - Lingua di destinazione iniziale: italiano, modificabile e salvata per libro. Lingua di origine rilevata dall'EPUB.
-- Interfaccia interamente in italiano, senza login e pensata per un solo utente locale.
+- Interfaccia in italiano e inglese, senza login e pensata per un solo utente locale. All’apertura usa la lingua del browser (italiano se non riconosciuta); il selettore IT/EN la salva in un cookie per un anno. Anche validazioni, messaggi flash ed errori dei batch seguono la lingua scelta.
 
 ## Requisiti
 
@@ -140,6 +140,8 @@ Verificare la connessione con **Account AI → Verifica**. Se compare un errore 
 
 L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione possono usare lo stesso account con modelli diversi oppure account diversi.
 
+Il selettore **IT / EN** nell’intestazione cambia la lingua dell’interfaccia: la scelta viene applicata subito e salvata in un cookie `locale` valido un anno. Senza una scelta esplicita, il server usa la lingua del browser e ripiega sull’italiano.
+
 ## Come funziona
 
 - **Importazione** — `EpubParser` legge `container.xml`, il package OPF, l'indice EPUB 3 (`nav`) o EPUB 2 (`NCX`), estrae titolo, autore, lingua, copertina e blocchi di testo. `BookImporter` crea libro, capitoli, pagine virtuali e blocchi in una transazione.
@@ -150,6 +152,7 @@ L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione 
 - **Allineamento** — il frontend divide blocchi originali e tradotti in frasi con `Intl.Segmenter`, mappa la selezione del browser alle frasi di origine e allinea le frasi tradotte per lunghezza e punteggiatura. Se il numero di frasi coincide, usa l'allineamento 1:1; altrimenti risolve casi 1:2, 2:1 e frasi mancanti.
 - **Provider** — `OpenAiCompatibleClient` usa l'endpoint `/chat/completions` e `/models` dell'API OpenAI. Funziona con OpenAI, OpenRouter, Ollama e server compatibili.
 - **Frontend** — Inertia collega le pagine React ai controller Laravel. Ant Design è configurato con `StyleProvider layer` e tema personalizzato; Tailwind gestisce il layout. Le pagine sono caricate in modo lazy da Vite.
+- **Lingua dell’interfaccia** — `SetLocale` applica il cookie `locale` oppure la lingua dichiarata dal browser, con fallback all’italiano. `i18next` e `react-i18next` traducono il frontend; `lang/{it,en}` contiene messaggi applicativi e validazioni. Ogni batch salva il proprio locale per localizzare anche gli errori generati dai job in background.
 - **Code** — la coda usa il driver `database` (tabella `jobs`). Il servizio `queue` avvia `QUEUE_WORKERS` processi `queue:work` sulla coda `translations`. `QUEUE_JOB_TIMEOUT` (default `360`) è il timeout effettivo del job e deve restare sopra `AI_REQUEST_TIMEOUT`; `DB_QUEUE_RETRY_AFTER` deve restare sopra `QUEUE_JOB_TIMEOUT` per evitare doppie esecuzioni.
 - **Persistenza** — MariaDB nel container; in test SQLite in memoria. EPUB originali in `storage/app/private/books`; copertine in `storage/app/public/covers`.
 
@@ -190,13 +193,15 @@ La suite Pest copre:
 - job di batch: successo, errore del provider, annullamento, ripresa dopo crash, account disattivato e catena seriale;
 - creazione e aggiornamento account, cifratura della chiave, modalità richieste, sincronizzazione modelli e cancellazione;
 - aggiornamento della lingua di destinazione del libro;
-- validazione dei capitoli appartenenti al libro.
+- validazione dei capitoli appartenenti al libro;
+- rilevamento della lingua da cookie e browser, cambio lingua, cookie annuale e messaggi backend in inglese;
+- lingua salvata sul batch e uso della stessa lingua negli errori dei job.
 
 ```bash
 make test
 ```
 
-Stato attuale: **53 test, 239 asserzioni**.
+Stato attuale: **63 test, 295 asserzioni**.
 
 ## Privacy e sicurezza
 
@@ -228,10 +233,12 @@ app/
   Services/Translation/   Servizio di traduzione, client OpenAI e orchestrazione batch
 resources/js/
   pages/                  Library, Accounts, Books/Show
-  components/             Renderer dei blocchi e pannello batch globale
+  components/             Renderer dei blocchi, pannello batch globale, selettore lingua
   contexts/               Provider del batch globale con polling
   layouts/                Layout condiviso
+  i18n/                   Inizializzazione i18next e dizionari it/en
   lib/                    Lingue, messaggi di errore, flash
+lang/                     Messaggi applicativi e validazioni it/en
 docker/                   PHP ini, entrypoint app e entrypoint queue
 tests/                    Suite Pest e fixture EPUB
 ```

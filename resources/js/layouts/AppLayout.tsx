@@ -3,19 +3,22 @@ import type { ReactNode } from 'react';
 import { BookOutlined, CloudServerOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { Link, usePage } from '@inertiajs/react';
 import { Tag } from 'antd';
+import { useTranslation } from 'react-i18next';
 
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useFlash } from '@/lib/useFlash';
-
-const NAV_ITEMS = [
-    { href: '/', label: 'Libreria', icon: <BookOutlined /> },
-    { href: '/accounts', label: 'Account AI', icon: <CloudServerOutlined /> },
-];
 
 export default function AppLayout({ children }: { children: ReactNode }) {
     useFlash();
 
+    const { t } = useTranslation();
     const { url } = usePage();
     const activeHref = url.startsWith('/accounts') ? '/accounts' : '/';
+
+    const navItems = [
+        { href: '/', label: t('nav.library'), icon: <BookOutlined /> },
+        { href: '/accounts', label: t('nav.accounts'), icon: <CloudServerOutlined /> },
+    ];
 
     return (
         <div className="min-h-screen">
@@ -30,13 +33,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                                 Book Translation Studio
                             </span>
                             <span className="hidden text-xs text-ink-500 sm:block">
-                                Confronta traduzioni, scegli la migliore
+                                {t('app.tagline')}
                             </span>
                         </span>
                     </Link>
 
                     <nav className="flex items-center gap-1 rounded-lg bg-parchment-100/80 p-1">
-                        {NAV_ITEMS.map((item) => {
+                        {navItems.map((item) => {
                             const active = activeHref === item.href;
 
                             return (
@@ -56,21 +59,24 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                         })}
                     </nav>
 
-                    <Tag
-                        icon={<SafetyCertificateOutlined />}
-                        color="default"
-                        className="hidden! lg:inline-flex!"
-                    >
-                        Solo locale
-                    </Tag>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <LanguageSwitcher />
+                        <Tag
+                            icon={<SafetyCertificateOutlined />}
+                            color="default"
+                            className="hidden! lg:inline-flex!"
+                        >
+                            {t('app.localOnly')}
+                        </Tag>
+                    </div>
                 </div>
             </header>
 
             <main className="mx-auto w-full max-w-[1500px] px-4 py-6 md:px-6 md:py-8">{children}</main>
 
             <footer className="mx-auto flex w-full max-w-[1500px] flex-wrap items-center justify-between gap-2 px-4 pb-8 pt-2 text-xs text-ink-500 md:px-6">
-                <span>Book Translation Studio · ambiente locale senza login</span>
-                <span>Le chiavi API sono cifrate e restano sul server.</span>
+                <span>{t('app.footerLocal')}</span>
+                <span>{t('app.footerKeys')}</span>
             </footer>
         </div>
     );

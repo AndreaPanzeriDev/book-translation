@@ -10,10 +10,12 @@ import { Link, router } from '@inertiajs/react';
 import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Select, Spin, Switch, Tag, Tooltip } from 'antd';
 import axios from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import BlockRenderer from '@/components/BlockRenderer';
 import { useTranslationBatch } from '@/contexts/TranslationBatchProvider';
 import AppLayout from '@/layouts/AppLayout';
+import { currentLocale } from '@/i18n';
 import { targetSentenceIndices, type TextSelection } from '@/lib/alignment';
 import { errorMessage, LANGUAGES, languageLabel, providerLabel } from '@/lib/languages';
 import type {
@@ -116,6 +118,7 @@ function characterOffset(element: HTMLElement, node: Node, offset: number): numb
 }
 
 function RequestModeTag({ mode }: { mode: RequestMode }) {
+    const { t } = useTranslation();
     const parallel = mode === 'parallel';
 
     return (
@@ -123,7 +126,7 @@ function RequestModeTag({ mode }: { mode: RequestMode }) {
             color={parallel ? 'blue' : 'default'}
             icon={parallel ? <ThunderboltOutlined /> : <OrderedListOutlined />}
         >
-            {parallel ? 'Parallelo' : 'Serie'}
+            {parallel ? t('studio.modeParallel') : t('studio.modeSerial')}
         </Tag>
     );
 }
@@ -139,6 +142,7 @@ function SlotPicker({
     accounts: AiAccount[];
     onChange: (slot: Slot) => void;
 }) {
+    const { t } = useTranslation();
     const account = accounts.find((item) => item.id === slot.accountId);
     const modelOptions = (account?.models ?? []).map((model) => ({
         value: model.model_id,
@@ -163,7 +167,7 @@ function SlotPicker({
             <div className="grid gap-2 sm:grid-cols-2">
                 <Select
                     value={slot.accountId ?? undefined}
-                    placeholder="Scegli account"
+                    placeholder={t('studio.accountPlaceholder')}
                     options={accounts.map((item) => ({
                         value: item.id,
                         label: item.name,
@@ -177,7 +181,7 @@ function SlotPicker({
                 <AutoComplete
                     value={slot.model}
                     options={modelOptions}
-                    placeholder="ID modello"
+                    placeholder={t('studio.modelPlaceholder')}
                     onChange={(value: string) => onChange({ ...slot, model: value })}
                     filterOption={(input, option) =>
                         String(option?.value ?? '')
@@ -188,7 +192,7 @@ function SlotPicker({
             </div>
             {account && account.models.length === 0 && (
                 <p className="mt-1.5 text-[11px] text-ink-500">
-                    Nessun modello sincronizzato: puoi digitare l’ID manualmente.
+                    {t('studio.noModels')}
                 </p>
             )}
         </div>
@@ -196,6 +200,7 @@ function SlotPicker({
 }
 
 export default function Show({ book, chapters, pageIndex, accounts }: Props) {
+    const { t } = useTranslation();
     const { message } = App.useApp();
     const { startBatch, batchesByBook } = useTranslationBatch();
     const bookBatch = batchesByBook[book.id];
@@ -271,15 +276,15 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         );
 
         if (modes.size === 1 && modes.has('parallel')) {
-            return 'Modalità parallela: tutte le pagine selezionate partono insieme.';
+            return t('studio.requestModeParallel');
         }
 
         if (modes.size === 1 && modes.has('serial')) {
-            return 'Modalità in serie: una richiesta alla volta per account.';
+            return t('studio.requestModeSerial');
         }
 
-        return 'Modalità per account: serie o parallelo secondo la configurazione del provider.';
-    }, [activeSlots, accounts]);
+        return t('studio.requestModeMixed');
+    }, [activeSlots, accounts, t]);
 
     const findTranslation = (pageId: number, slot: Slot): Translation | undefined => {
         if (!slot.accountId || !slot.model) {
@@ -590,12 +595,12 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         }
 
         if (pageIds.length === 0) {
-            void message.warning('Seleziona almeno una pagina.');
+            void message.warning(t('studio.selectPageWarning'));
             return;
         }
 
         if (!slotsReady) {
-            void message.warning('Scegli account e modello per ogni colonna di traduzione.');
+            void message.warning(t('studio.slotsWarning'));
             return;
         }
 
@@ -621,13 +626,9 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
             });
 
             if (result.batch) {
-                void message.success(
-                    'Traduzione avviata: il server continua anche se cambi pagina o chiudi il tab.',
-                );
+                void message.success(t('studio.batchStarted'));
             } else {
-                void message.info(
-                    result.message ?? 'Tutte le traduzioni richieste sono già in cache.',
-                );
+                void message.info(result.message ?? t('studio.allCached'));
             }
         } catch (error) {
             void message.error(errorMessage(error));
@@ -686,7 +687,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         <AppLayout>
             <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-3">
-                    <Button icon={<ArrowLeftOutlined />} onClick={() => router.visit('/')} aria-label="Torna alla libreria" />
+                    <Button icon={<ArrowLeftOutlined />} onClick={() => router.visit('/')} aria-label={t('studio.backAria')} />
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <h1 className="truncate font-reading text-2xl text-ink-900 md:text-3xl">
@@ -697,21 +698,24 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                             </Tag>
                         </div>
                         <p className="mt-1 text-sm text-ink-500">
-                            {book.author ?? 'Autore sconosciuto'} · {book.chapters_count}{' '}
-                            {book.chapters_count === 1 ? 'capitolo' : 'capitoli'} ·{' '}
-                            {book.pages_count}{' '}
-                            {book.pages_count === 1 ? 'pagina virtuale' : 'pagine virtuali'} ·{' '}
-                            {book.page_char_limit}{' '}
-                            {book.page_char_limit === 1 ? 'carattere' : 'caratteri'} per pagina
+                            {book.author ?? t('common.authorUnknown')} ·{' '}
+                            {t('common.chapters', { count: book.chapters_count })} ·{' '}
+                            {t('common.virtualPages', { count: book.pages_count })} ·{' '}
+                            {t('studio.charsPerPage', { count: book.page_char_limit })}
                         </p>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-ink-500">Lingua di destinazione</span>
+                    <span className="text-xs uppercase tracking-wide text-ink-500">
+                        {t('studio.targetLanguage')}
+                    </span>
                     <Select
                         value={targetLanguage}
-                        options={LANGUAGES}
+                        options={LANGUAGES.map((language) => ({
+                            value: language,
+                            label: languageLabel(language),
+                        }))}
                         onChange={updateTargetLanguage}
                         loading={savingTargetLanguage}
                         disabled={translationBusy}
@@ -727,12 +731,12 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     className="mb-4"
                     type="warning"
                     showIcon
-                    title="Nessun account AI attivo"
+                    title={t('studio.noAccountsTitle')}
                     description={
-                        <span>
-                            <Link href="/accounts">Configura un account</Link> e sincronizza i modelli per
-                            iniziare a tradurre.
-                        </span>
+                        <Trans
+                            i18nKey="studio.noAccountsDescription"
+                            components={{ link: <Link href="/accounts" /> }}
+                        />
                     }
                 />
             )}
@@ -741,7 +745,9 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                 <aside className="space-y-4">
                     <div className="rounded-xl border border-parchment-200 bg-white p-3 shadow-sm">
                         <div className="mb-2 flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-ink-900">Capitoli</h2>
+                            <h2 className="text-sm font-semibold text-ink-900">
+                                {t('studio.chaptersTitle')}
+                            </h2>
                             <Tag>{chapters.length}</Tag>
                         </div>
                         <div className="max-h-[52vh] space-y-0.5 overflow-y-auto pr-1">
@@ -796,14 +802,16 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
 
                         <div className="grid gap-2">
                             <Button size="small" onClick={toggleChapter} disabled={chapterPages.length === 0}>
-                                {chapterFullySelected ? 'Deseleziona capitolo' : 'Seleziona capitolo'}
+                                {chapterFullySelected
+                                    ? t('studio.deselectChapter')
+                                    : t('studio.selectChapter')}
                             </Button>
                             <Button size="small" onClick={() => setSelected(new Set(pageIndex.map((page) => page.id)))}>
-                                Tutto il libro ({pageIndex.length})
+                                {t('studio.selectAll', { count: pageIndex.length })}
                             </Button>
                             {selected.size > 0 && (
                                 <Button size="small" type="text" danger onClick={() => setSelected(new Set())}>
-                                    Azzera selezione
+                                    {t('studio.clearSelection')}
                                 </Button>
                             )}
                         </div>
@@ -813,12 +821,14 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                         <div className="flex items-end justify-between">
                             <span className="text-3xl font-semibold text-ink-900">{selected.size}</span>
                             <span className="pb-1 text-xs text-ink-500">
-                                {selected.size === 1 ? 'pagina selezionata' : 'pagine selezionate'}
+                                {t('studio.selectedPages', { count: selected.size })}
                             </span>
                         </div>
                         <p className="mt-0.5 text-xs text-ink-500">
-                            {selectedChars.toLocaleString('it-IT')}{' '}
-                            {selectedChars === 1 ? 'carattere' : 'caratteri'} da tradurre
+                            {t('studio.charsToTranslate', {
+                                count: selectedChars,
+                                value: selectedChars.toLocaleString(currentLocale()),
+                            })}
                         </p>
 
                         <Button
@@ -831,11 +841,10 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                             disabled={selected.size === 0 || !slotsReady || translationBusy}
                             loading={translationBusy}
                         >
-                            {translationBusy ? 'Traduzione in corso…' : 'Traduci selezione'}
+                            {translationBusy ? t('studio.translating') : t('studio.translateSelection')}
                         </Button>
                         <p className="mt-2 text-[11px] leading-snug text-ink-500">
-                            {requestModeSummary} Le traduzioni già in cache vengono saltate
-                            automaticamente.
+                            {requestModeSummary} {t('studio.cacheHint')}
                         </p>
                     </div>
                 </aside>
@@ -849,15 +858,17 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                         size="small"
                                         icon={<LeftOutlined />}
                                         onClick={() => setActiveChapterId(previousChapter.id)}
-                                        aria-label="Capitolo precedente"
+                                        aria-label={t('studio.previousChapterAria')}
                                     />
                                 )}
                                 <div className="min-w-0">
                                     <p className="text-[11px] uppercase tracking-wide text-ink-500">
-                                        Capitolo {activeChapter?.position ?? '—'}
+                                        {t('studio.chapterLabel', {
+                                            position: activeChapter?.position ?? '—',
+                                        })}
                                     </p>
                                     <h2 className="truncate text-lg font-semibold text-ink-900">
-                                        {activeChapter?.title ?? 'Seleziona un capitolo'}
+                                        {activeChapter?.title ?? t('studio.chapterPlaceholder')}
                                     </h2>
                                 </div>
                                 {nextChapter && (
@@ -865,27 +876,29 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                         size="small"
                                         icon={<RightOutlined />}
                                         onClick={() => setActiveChapterId(nextChapter.id)}
-                                        aria-label="Capitolo successivo"
+                                        aria-label={t('studio.nextChapterAria')}
                                     />
                                 )}
                             </div>
 
                             <div className="flex items-center gap-3">
-                                <span className="text-xs text-ink-500">Confronta due traduzioni</span>
+                                <span className="text-xs text-ink-500">
+                                    {t('studio.compareToggle')}
+                                </span>
                                 <Switch checked={secondColumn} onChange={toggleSecondColumn} />
                             </div>
                         </div>
 
                         <div className={secondColumn ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3'}>
                             <SlotPicker
-                                label="Traduzione 1"
+                                label={t('studio.slot1')}
                                 slot={slotA}
                                 accounts={accounts}
                                 onChange={(slot) => updateSlot('a', slot)}
                             />
                             {secondColumn && (
                                 <SlotPicker
-                                    label="Traduzione 2"
+                                    label={t('studio.slot2')}
                                     slot={slotB}
                                     accounts={accounts}
                                     onChange={(slot) => updateSlot('b', slot)}
@@ -896,13 +909,13 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
 
                     {loadingPages && chapterPages.every((page) => !pages[page.id]) ? (
                         <div className="flex justify-center rounded-xl border border-parchment-200 bg-white py-20">
-                            <Spin description="Caricamento pagine…" size="large">
+                            <Spin description={t('studio.loadingPages')} size="large">
                                 <div className="h-24 w-1" />
                             </Spin>
                         </div>
                     ) : chapterPages.length === 0 ? (
                         <div className="rounded-xl border border-parchment-200 bg-white py-16">
-                            <Empty description="Questo capitolo non contiene pagine." />
+                            <Empty description={t('studio.emptyChapter')} />
                         </div>
                     ) : (
                         <div className="space-y-5">
@@ -931,15 +944,22 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                     }}
                                                 />
                                                 <span className="text-sm font-medium text-ink-900">
-                                                    Pagina {info.position}
+                                                    {t('studio.pageLabel', {
+                                                        position: info.position,
+                                                    })}
                                                 </span>
-                                                <Tag>cap. {info.chapter_position}</Tag>
+                                                <Tag>
+                                                    {t('studio.chapterTag', {
+                                                        position: info.chapter_position,
+                                                    })}
+                                                </Tag>
                                                 <span className="text-xs text-ink-500">
-                                                    {info.char_count}{' '}
-                                                    {info.char_count === 1 ? 'carattere' : 'caratteri'}
+                                                    {t('common.characters', {
+                                                        count: info.char_count,
+                                                    })}
                                                 </span>
                                                 <span className="hidden text-[11px] text-ink-500 md:inline">
-                                                    Shift + clic per selezionare un intervallo
+                                                    {t('studio.shiftHint')}
                                                 </span>
                                             </div>
 
@@ -954,7 +974,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                     onClick={() => translatePage(info.id)}
                                                     disabled={!slotsReady || translationBusy}
                                                 >
-                                                    Traduci
+                                                    {t('studio.translate')}
                                                 </Button>
                                             </div>
                                         </div>
@@ -978,7 +998,11 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                 >
                                                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-parchment-200 pb-2">
                                                         <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                                                            Originale · {languageLabel(book.language)}
+                                                            {t('studio.originalLabel', {
+                                                                language: languageLabel(
+                                                                    book.language,
+                                                                ),
+                                                            })}
                                                         </span>
                                                         <span className="text-[11px] text-ink-500">
                                                             {page.source_hash.slice(0, 8)}
@@ -988,8 +1012,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                         findTranslation(info.id, slot),
                                                     ) && (
                                                         <p className="mb-2 text-[11px] text-ink-500">
-                                                            Seleziona una frase per evidenziare la
-                                                            traduzione corrispondente.
+                                                            {t('studio.selectionHint')}
                                                         </p>
                                                     )}
                                                     <BlockRenderer
@@ -1023,15 +1046,23 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                         >
                                                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-parchment-200 pb-2">
                                                                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                                                                    Traduzione {key === 'a' ? '1' : '2'}
+                                                                    {t('studio.translationLabel', {
+                                                                        number:
+                                                                            key === 'a'
+                                                                                ? '1'
+                                                                                : '2',
+                                                                    })}
                                                                 </span>
                                                                 <div className="flex flex-wrap items-center gap-1">
                                                                     <Tag>
-                                                                        {account?.name ?? 'Account mancante'}
+                                                                        {account?.name ??
+                                                                            t('studio.accountMissing')}
                                                                     </Tag>
                                                                     {translation && (
-                                                                        <Tooltip title="Traduzione già in cache">
-                                                                            <Tag color="green">cache</Tag>
+                                                                        <Tooltip title={t('studio.cachedTooltip')}>
+                                                                            <Tag color="green">
+                                                                                {t('studio.cacheTag')}
+                                                                            </Tag>
                                                                         </Tooltip>
                                                                     )}
                                                                 </div>
@@ -1050,7 +1081,9 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                                         </Tag>
                                                                         {translation.total_tokens != null && (
                                                                             <span>
-                                                                                {translation.total_tokens} token
+                                                                                {t('studio.tokens', {
+                                                                                    count: translation.total_tokens,
+                                                                                })}
                                                                             </span>
                                                                         )}
                                                                         {translation.latency_ms != null && (
@@ -1069,15 +1102,15 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                                     <TranslationOutlined className="text-2xl text-parchment-300" />
                                                                     <p className="max-w-[26ch] text-sm text-ink-500">
                                                                         {ready
-                                                                            ? 'Nessuna traduzione in cache per questo account e modello.'
-                                                                            : 'Scegli un account attivo e un modello per questa colonna.'}
+                                                                            ? t('studio.emptyTranslationReady')
+                                                                            : t('studio.emptyTranslationNotReady')}
                                                                     </p>
                                                                     <Button
                                                                         size="small"
                                                                         onClick={() => translatePage(info.id)}
                                                                         disabled={!ready || translationBusy}
                                                                     >
-                                                                        Traduci ora
+                                                                        {t('studio.translateNow')}
                                                                     </Button>
                                                                 </div>
                                                             )}

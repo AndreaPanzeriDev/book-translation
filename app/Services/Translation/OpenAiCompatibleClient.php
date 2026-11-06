@@ -30,17 +30,22 @@ class OpenAiCompatibleClient
         if ($response->failed()) {
             $detail = trim(Str::limit($response->body(), 400));
 
-            throw new TranslationException(
-                "Il provider ha risposto con HTTP {$response->status()}"
-                .($detail !== '' ? ": {$detail}" : '.')
-            );
+            throw new TranslationException(__(
+                $detail !== ''
+                    ? 'messages.translation.provider_http_error_with_detail'
+                    : 'messages.translation.provider_http_error',
+                [
+                    'status' => $response->status(),
+                    'detail' => $detail,
+                ],
+            ));
         }
 
         $data = $response->json();
         $content = data_get($data, 'choices.0.message.content');
 
         if (! is_string($content) || trim($content) === '') {
-            throw new TranslationException('Il provider ha restituito una risposta vuota.');
+            throw new TranslationException(__('messages.translation.provider_empty_response'));
         }
 
         return [
@@ -66,16 +71,16 @@ class OpenAiCompatibleClient
                 ->get($this->modelsEndpoint($account->base_url));
         } catch (ConnectionException $e) {
             throw new TranslationException(
-                'Impossibile contattare il provider: '.$e->getMessage(),
+                __('messages.translation.provider_contact_failed', ['error' => $e->getMessage()]),
                 previous: $e,
             );
         }
 
         if ($response->failed()) {
-            throw new TranslationException(
-                "Impossibile leggere i modelli: HTTP {$response->status()} "
-                .Str::limit($response->body(), 300)
-            );
+            throw new TranslationException(__('messages.translation.provider_models_failed', [
+                'status' => $response->status(),
+                'detail' => Str::limit($response->body(), 300),
+            ]));
         }
 
         $payload = $response->json();

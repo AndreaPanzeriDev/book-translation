@@ -2,10 +2,13 @@
 
 use App\Http\Controllers\AiAccountController;
 use App\Http\Controllers\BookController;
+use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\TranslationBatchController;
 use App\Http\Controllers\TranslationController;
 use Illuminate\Support\Facades\Route;
+
+Route::patch('/locale', [LocaleController::class, 'update'])->name('locale.update');
 
 Route::get('/', [BookController::class, 'index'])->name('library');
 Route::post('/books', [BookController::class, 'store'])->name('books.store');
