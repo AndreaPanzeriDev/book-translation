@@ -234,6 +234,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
     const [pages, setPages] = useState<Record<number, PageDetail>>({});
     const [translationCache, setTranslationCache] = useState<Record<number, Translation[]>>({});
+    const [chapterCoverage, setChapterCoverage] = useState<Record<number, number>>({});
     const [loadingPages, setLoadingPages] = useState(false);
     const [secondColumn, setSecondColumn] = useState(false);
     const [slotA, setSlotA] = useState<Slot>(
@@ -391,6 +392,52 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     }, [activeChapterId, book.id, message]);
 
     const completedCount = bookBatch?.succeeded ?? 0;
+
+    useEffect(() => {
+        const account = accounts.find((item) => item.id === slotA.accountId);
+
+        if (!slotA.accountId || slotA.model.trim() === '' || !account || !account.is_active) {
+            setChapterCoverage({});
+
+            return;
+        }
+
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => {
+            axios
+                .get<{ coverage: { chapter_id: number; translated: number }[] }>(
+                    `/books/${book.id}/translation-coverage`,
+                    {
+                        params: {
+                            account_id: slotA.accountId,
+                            model: slotA.model,
+                            target_language: targetLanguage,
+                        },
+                        signal: controller.signal,
+                    },
+                )
+                .then(({ data }) => {
+                    const next: Record<number, number> = {};
+
+                    for (const row of data.coverage) {
+                        next[row.chapter_id] = row.translated;
+                    }
+
+                    setChapterCoverage(next);
+                })
+                .catch((error) => {
+                    if (!axios.isCancel(error)) {
+                        // La copertura è indicativa: i tag cache delle pagine
+                        // restano la fonte principale per il capitolo aperto.
+                    }
+                });
+        }, 200);
+
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [accounts, book.id, completedCount, slotA.accountId, slotA.model, targetLanguage]);
 
     useEffect(() => {
         if (completedCount <= completedCountRef.current) {
@@ -694,20 +741,15 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     const coverageByChapter = useMemo(() => {
         const coverage: Record<number, { translated: number; total: number }> = {};
 
-        if (!slotIsReady(slotA)) {
-            return coverage;
-        }
-
         for (const chapter of chapters) {
-            const pagesOfChapter = pageIndex.filter((page) => page.chapter_id === chapter.id);
-            const translated = pagesOfChapter.filter((page) => findTranslation(page.id, slotA)).length;
-
-            coverage[chapter.id] = { translated, total: pagesOfChapter.length };
+            coverage[chapter.id] = {
+                translated: chapterCoverage[chapter.id] ?? 0,
+                total: chapter.pages_count,
+            };
         }
 
         return coverage;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chapters, pageIndex, translationCache, slotA, targetLanguage]);
+    }, [chapters, chapterCoverage]);
 
     return (
         <AppLayout>
