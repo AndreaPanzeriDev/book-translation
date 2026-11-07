@@ -22,6 +22,8 @@ import type {
     AiAccount,
     BookSummary,
     ChapterSummary,
+    LastUsedTranslationSlot,
+    LastUsedTranslationSlots,
     PageDetail,
     PageIndexItem,
     RequestMode,
@@ -33,6 +35,7 @@ interface Props {
     chapters: ChapterSummary[];
     pageIndex: PageIndexItem[];
     accounts: AiAccount[];
+    lastUsedSlots: LastUsedTranslationSlots;
 }
 
 type SlotKey = 'a' | 'b';
@@ -55,6 +58,23 @@ function defaultSlot(accounts: AiAccount[], excludeAccountId?: number | null): S
     }
 
     return { accountId: account.id, model: defaultModelFor(account) };
+}
+
+function slotFromHistory(
+    last: LastUsedTranslationSlot | null | undefined,
+    accounts: AiAccount[],
+): Slot | null {
+    if (!last || last.model.trim() === '') {
+        return null;
+    }
+
+    const account = accounts.find((item) => item.id === last.account_id);
+
+    if (!account || !account.is_active) {
+        return null;
+    }
+
+    return { accountId: account.id, model: last.model };
 }
 
 function mapTranslatedBlocks(page: PageDetail, translation: Translation) {
@@ -199,7 +219,7 @@ function SlotPicker({
     );
 }
 
-export default function Show({ book, chapters, pageIndex, accounts }: Props) {
+export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlots }: Props) {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const { startBatch, batchesByBook } = useTranslationBatch();
@@ -216,8 +236,14 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
     const [translationCache, setTranslationCache] = useState<Record<number, Translation[]>>({});
     const [loadingPages, setLoadingPages] = useState(false);
     const [secondColumn, setSecondColumn] = useState(false);
-    const [slotA, setSlotA] = useState<Slot>(() => defaultSlot(accounts));
-    const [slotB, setSlotB] = useState<Slot>(() => defaultSlot(accounts, slotA.accountId));
+    const [slotA, setSlotA] = useState<Slot>(
+        () => slotFromHistory(lastUsedSlots.a, accounts) ?? defaultSlot(accounts),
+    );
+    const [slotB, setSlotB] = useState<Slot>(
+        () =>
+            slotFromHistory(lastUsedSlots.b, accounts) ??
+            defaultSlot(accounts, slotA.accountId),
+    );
     const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
     const [startingBatch, setStartingBatch] = useState(false);
 

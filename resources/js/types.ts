@@ -115,6 +115,16 @@ export interface TranslationBatchSlot {
     model: string;
 }
 
+export interface LastUsedTranslationSlot {
+    account_id: number;
+    model: string;
+}
+
+export interface LastUsedTranslationSlots {
+    a: LastUsedTranslationSlot | null;
+    b: LastUsedTranslationSlot | null;
+}
+
 export interface TranslationBatchFailure {
     item_id: number;
     page_id: number;
