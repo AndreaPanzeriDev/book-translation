@@ -59,6 +59,7 @@ export interface AiAccount {
     default_model: string | null;
     is_active: boolean;
     request_mode: RequestMode;
+    max_parallel_requests: number;
     has_api_key: boolean;
     models: AiModel[];
 }

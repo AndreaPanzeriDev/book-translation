@@ -33,6 +33,7 @@ class AiAccountController extends Controller
         $data = $this->validated($request);
         $data['is_active'] = $request->boolean('is_active', true);
         $data['request_mode'] ??= AiAccount::REQUEST_MODE_SERIAL;
+        $data['max_parallel_requests'] ??= AiAccount::DEFAULT_MAX_PARALLEL_REQUESTS;
 
         $account = AiAccount::create($data);
 
@@ -70,6 +71,10 @@ class AiAccountController extends Controller
 
         if (blank($data['api_key'] ?? null)) {
             unset($data['api_key']);
+        }
+
+        if (array_key_exists('max_parallel_requests', $data) && $data['max_parallel_requests'] === null) {
+            unset($data['max_parallel_requests']);
         }
 
         $account->update($data);
@@ -148,6 +153,7 @@ class AiAccountController extends Controller
             'default_model' => ['nullable', 'string', 'max:190'],
             'is_active' => ['nullable', 'boolean'],
             'request_mode' => ['nullable', 'string', 'in:serial,parallel'],
+            'max_parallel_requests' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
     }
 }

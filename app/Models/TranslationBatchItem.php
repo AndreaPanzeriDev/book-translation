@@ -29,6 +29,7 @@ class TranslationBatchItem extends Model
         'translation_id',
         'started_at',
         'finished_at',
+        'dispatched_at',
     ];
 
     protected function casts(): array
@@ -37,6 +38,7 @@ class TranslationBatchItem extends Model
             'page_position' => 'integer',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'dispatched_at' => 'datetime',
         ];
     }
 

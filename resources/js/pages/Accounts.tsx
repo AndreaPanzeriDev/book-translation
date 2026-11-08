@@ -10,7 +10,20 @@ import {
     ThunderboltOutlined,
 } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
-import { Alert, Button, Form, Input, Modal, Popconfirm, Radio, Select, Switch, Tag, Tooltip } from 'antd';
+import {
+    Alert,
+    Button,
+    Form,
+    Input,
+    InputNumber,
+    Modal,
+    Popconfirm,
+    Radio,
+    Select,
+    Switch,
+    Tag,
+    Tooltip,
+} from 'antd';
 import { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
@@ -29,13 +42,15 @@ interface FormValues {
     api_key?: string;
     default_model?: string;
     request_mode: RequestMode;
+    max_parallel_requests: number;
     is_active: boolean;
-    [key: string]: string | boolean | undefined;
+    [key: string]: string | number | boolean | undefined;
 }
 
 export default function Accounts({ accounts }: Props) {
     const { t } = useTranslation();
     const [form] = Form.useForm<FormValues>();
+    const requestMode = Form.useWatch('request_mode', form);
     const [open, setOpen] = useState(false);
     const [editing, setEditing] = useState<AiAccount | null>(null);
     const [saving, setSaving] = useState(false);
@@ -48,6 +63,7 @@ export default function Accounts({ accounts }: Props) {
             provider: 'openai',
             base_url: PROVIDER_PRESETS[0].baseUrl,
             request_mode: 'serial',
+            max_parallel_requests: 4,
             is_active: true,
         });
         setOpen(true);
@@ -63,6 +79,7 @@ export default function Accounts({ accounts }: Props) {
             api_key: '',
             default_model: account.default_model ?? '',
             request_mode: account.request_mode ?? 'serial',
+            max_parallel_requests: account.max_parallel_requests,
             is_active: account.is_active,
         });
         setOpen(true);
@@ -200,7 +217,9 @@ export default function Accounts({ accounts }: Props) {
                                                     }
                                                 >
                                                     {account.request_mode === 'parallel'
-                                                        ? t('accounts.modeParallel')
+                                                        ? t('accounts.modeParallelLimit', {
+                                                              limit: account.max_parallel_requests,
+                                                          })
                                                         : t('accounts.modeSerial')}
                                                 </Tag>
                                                 {account.has_api_key ? (
@@ -411,6 +430,27 @@ export default function Accounts({ accounts }: Props) {
                             <Radio value="parallel">{t('accounts.modeParallel')}</Radio>
                         </Radio.Group>
                     </Form.Item>
+
+                    {requestMode === 'parallel' && (
+                        <Form.Item
+                            name="max_parallel_requests"
+                            label={t('accounts.form.maxParallelLabel')}
+                            extra={t('accounts.form.maxParallelExtra')}
+                            rules={[
+                                {
+                                    required: true,
+                                    message: t('accounts.form.maxParallelRequired'),
+                                },
+                            ]}
+                        >
+                            <InputNumber
+                                min={1}
+                                max={50}
+                                precision={0}
+                                className="w-full"
+                            />
+                        </Form.Item>
+                    )}
 
                     <Form.Item
                         name="is_active"

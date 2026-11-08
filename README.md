@@ -84,9 +84,9 @@ Alla creazione l’elenco dei modelli viene importato automaticamente. Usare **S
 Ogni account ha una **Modalità richieste**:
 
 - **In serie** (predefinita) — quando si traduce una selezione, le pagine vengono inviate una alla volta; la successiva parte solo quando la precedente è terminata.
-- **In parallelo** — tutte le pagine selezionate vengono inviate contemporaneamente, con una richiesta separata per pagina. Con due colonne di traduzione, ogni account segue la propria modalità in modo indipendente.
+- **In parallelo** — le pagine vengono inviate fino al limite di **Richieste parallele massime** configurato sull’account (default `4`, valore modificabile nella scheda dell’account). Il limite è per account e vale anche quando lo usano libri diversi; ogni pagina resta una richiesta separata. Con due colonne di traduzione, ogni account segue la propria modalità in modo indipendente.
 
-In parallelo le richieste vengono distribuite ai worker del servizio `queue`: con `QUEUE_WORKERS=4` si possono avere fino a 4 richieste contemporanee in totale, condivise tra i batch attivi. In serie un account esegue una sola richiesta alla volta anche se lo usano libri diversi, grazie a un lock condiviso. Per aumentare il parallelismo alzare `QUEUE_WORKERS` in `.env` e riavviare con `./setup.sh` (a costo di maggiore memoria).
+In parallelo le richieste vengono distribuite ai worker del servizio `queue`: con `QUEUE_WORKERS=4` si possono avere fino a 4 richieste contemporanee in totale, condivise tra i batch attivi. Il limite dell’account non può quindi superare il numero di worker: alzare `QUEUE_WORKERS` in `.env` e riavviare con `./setup.sh` (a costo di maggiore memoria) per aumentare il parallelismo effettivo. In serie un account esegue una sola richiesta alla volta anche se lo usano libri diversi, grazie a un lock condiviso.
 
 Le chiavi API sono cifrate con la `APP_KEY` di Laravel e non vengono mai inviate al browser. In modifica, lasciare vuoto il campo chiave per mantenere quella esistente.
 

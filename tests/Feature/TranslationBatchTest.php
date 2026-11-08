@@ -21,8 +21,11 @@ use Illuminate\Support\Facades\Queue;
 /**
  * @return array{0: Book, 1: Collection<int, Page>, 2: AiAccount}
  */
-function makeBatchFixture(int $pageCount = 1, string $requestMode = 'parallel'): array
-{
+function makeBatchFixture(
+    int $pageCount = 1,
+    string $requestMode = 'parallel',
+    int $maxParallelRequests = AiAccount::DEFAULT_MAX_PARALLEL_REQUESTS,
+): array {
     $book = Book::create([
         'title' => 'Atlante delle maree',
         'author' => 'Ada Lovelace',
@@ -70,6 +73,7 @@ function makeBatchFixture(int $pageCount = 1, string $requestMode = 'parallel'):
         'default_model' => 'test-model',
         'is_active' => true,
         'request_mode' => $requestMode,
+        'max_parallel_requests' => $maxParallelRequests,
     ]);
 
     return [$book, $pages, $account];
@@ -158,6 +162,65 @@ it('con un account seriale mette in coda solo la prima pagina', function () {
         ->assertJsonPath('batch.total', 3);
 
     Queue::assertPushed(ProcessTranslationBatchItem::class, 1);
+});
+
+it('rispetta il limite di richieste parallele dell’account', function () {
+    Queue::fake();
+    [$book, $pages, $account] = makeBatchFixture(3, 'parallel', 2);
+
+    $this->postJson(route('translation-batches.store', $book), batchPayload($pages, $account))
+        ->assertCreated()
+        ->assertJsonPath('batch.total', 3)
+        ->assertJsonPath('batch.pending', 3);
+
+    Queue::assertPushed(ProcessTranslationBatchItem::class, 2);
+
+    expect(TranslationBatchItem::whereNotNull('dispatched_at')->count())->toBe(2)
+        ->and(TranslationBatchItem::whereNull('dispatched_at')->count())->toBe(1);
+});
+
+it('avvia la pagina successiva quando un item parallelo termina', function () {
+    fakeBatchResponse();
+    Queue::fake();
+    [$book, $pages, $account] = makeBatchFixture(3, 'parallel', 2);
+
+    $this->postJson(route('translation-batches.store', $book), batchPayload($pages, $account))
+        ->assertCreated();
+
+    $dispatched = TranslationBatchItem::query()
+        ->whereNotNull('dispatched_at')
+        ->orderBy('page_position')
+        ->get();
+    $waiting = TranslationBatchItem::query()->whereNull('dispatched_at')->firstOrFail();
+
+    (new ProcessTranslationBatchItem($dispatched->firstOrFail()->id))->handle(
+        app(TranslationService::class),
+        app(TranslationBatchService::class),
+    );
+
+    expect($waiting->fresh()->dispatched_at)->not->toBeNull();
+
+    Queue::assertPushed(
+        ProcessTranslationBatchItem::class,
+        fn (ProcessTranslationBatchItem $job) => $job->itemId === $waiting->id,
+    );
+});
+
+it('condivide il limite parallelo tra libri diversi', function () {
+    Queue::fake();
+    [$firstBook, $firstPages, $account] = makeBatchFixture(1, 'parallel', 1);
+    [$secondBook, $secondPages] = makeBatchFixture(1, 'parallel', 1);
+
+    $this->postJson(route('translation-batches.store', $firstBook), batchPayload($firstPages, $account))
+        ->assertCreated();
+
+    $this->postJson(route('translation-batches.store', $secondBook), batchPayload($secondPages, $account))
+        ->assertCreated();
+
+    Queue::assertPushed(ProcessTranslationBatchItem::class, 1);
+
+    expect(TranslationBatchItem::whereNotNull('dispatched_at')->count())->toBe(1)
+        ->and(TranslationBatchItem::whereNull('dispatched_at')->count())->toBe(1);
 });
 
 it('rifiuta un secondo batch attivo sullo stesso libro', function () {

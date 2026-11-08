@@ -73,7 +73,7 @@ class ProcessTranslationBatchItem implements ShouldQueue
             // serve, riprende la catena seriale rimasta interrotta.
             if ($item->batch instanceof TranslationBatch) {
                 $batches->refresh($item->batch);
-                $batches->dispatchNextSerialItem($item);
+                $batches->dispatchNextItem($item);
             }
 
             return;
@@ -193,7 +193,7 @@ class ProcessTranslationBatchItem implements ShouldQueue
         }
 
         $batches->refresh($item->batch);
-        $batches->dispatchNextSerialItem($item->fresh());
+        $batches->dispatchNextItem($item->fresh());
     }
 
     /**
@@ -220,7 +220,7 @@ class ProcessTranslationBatchItem implements ShouldQueue
             // accodato il prossimo item seriale: riprende la catena.
             if ($item->batch instanceof TranslationBatch) {
                 $batches->refresh($item->batch);
-                $batches->dispatchNextSerialItem($item);
+                $batches->dispatchNextItem($item);
             }
 
             return;

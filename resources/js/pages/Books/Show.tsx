@@ -137,7 +137,7 @@ function characterOffset(element: HTMLElement, node: Node, offset: number): numb
     return range.toString().length;
 }
 
-function RequestModeTag({ mode }: { mode: RequestMode }) {
+function RequestModeTag({ mode, limit }: { mode: RequestMode; limit?: number }) {
     const { t } = useTranslation();
     const parallel = mode === 'parallel';
 
@@ -146,7 +146,11 @@ function RequestModeTag({ mode }: { mode: RequestMode }) {
             color={parallel ? 'blue' : 'default'}
             icon={parallel ? <ThunderboltOutlined /> : <OrderedListOutlined />}
         >
-            {parallel ? t('studio.modeParallel') : t('studio.modeSerial')}
+            {parallel
+                ? limit !== undefined
+                    ? t('studio.modeParallelLimit', { limit })
+                    : t('studio.modeParallel')
+                : t('studio.modeSerial')}
         </Tag>
     );
 }
@@ -180,7 +184,10 @@ function SlotPicker({
                 {account && (
                     <div className="flex flex-wrap items-center gap-1">
                         <Tag>{providerLabel(account.provider)}</Tag>
-                        <RequestModeTag mode={account.request_mode} />
+                        <RequestModeTag
+                            mode={account.request_mode}
+                            limit={account.max_parallel_requests}
+                        />
                     </div>
                 )}
             </div>

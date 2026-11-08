@@ -14,6 +14,12 @@ use Illuminate\Support\Str;
 
 class TranslationBatchService
 {
+    /**
+     * Dopo questo tempo un item "dispatched" ma mai avviato viene considerato
+     * perso dalla coda e torna disponibile per un nuovo dispatch.
+     */
+    private const DISPATCH_STALE_MINUTES = 15;
+
     public function __construct(private readonly TranslationService $translator) {}
 
     /**
@@ -226,6 +232,7 @@ class TranslationBatchService
                     'translation_id' => null,
                     'started_at' => null,
                     'finished_at' => null,
+                    'dispatched_at' => null,
                     'updated_at' => now(),
                 ]);
 
@@ -310,7 +317,7 @@ class TranslationBatchService
             $this->refresh($item->batch);
         }
 
-        $this->dispatchNextSerialItem($item);
+        $this->dispatchNextItem($item);
     }
 
     public function markItemCancelled(TranslationBatchItem $item): void
@@ -328,19 +335,33 @@ class TranslationBatchService
         if ($item->batch) {
             $this->refresh($item->batch);
         }
+
+        $this->dispatchNextItem($item);
     }
 
-    public function dispatchNextSerialItem(TranslationBatchItem $item): void
+    public function dispatchNextItem(TranslationBatchItem $item): void
     {
         $batch = $item->batch()->first();
 
-        if (! $batch || $batch->cancel_requested_at !== null) {
+        if (! $batch) {
             return;
         }
 
         $account = $item->account()->first();
 
-        if ($account && $account->request_mode === 'parallel') {
+        if (! $account) {
+            return;
+        }
+
+        if ($account->isParallel()) {
+            // Il limite è per account e vale anche per libri diversi: quando
+            // un item termina libera uno slot per qualsiasi batch in attesa.
+            $this->dispatchParallelItems($account);
+
+            return;
+        }
+
+        if ($batch->cancel_requested_at !== null) {
             return;
         }
 
@@ -379,10 +400,12 @@ class TranslationBatchService
         foreach ($items as $accountId => $group) {
             $account = $accounts->get((int) $accountId);
 
-            if ($account && $account->request_mode === 'parallel') {
-                foreach ($group as $item) {
-                    $this->dispatchItem($item);
-                }
+            if (! $account) {
+                continue;
+            }
+
+            if ($account->isParallel()) {
+                $this->dispatchParallelItems($account);
 
                 continue;
             }
@@ -395,6 +418,75 @@ class TranslationBatchService
         }
     }
 
+    /**
+     * Accoda gli item pendenti dell'account rispettando max_parallel_requests.
+     * Il conteggio è globale per account, così il limite vale anche quando
+     * più libri usano lo stesso provider contemporaneamente.
+     */
+    private function dispatchParallelItems(AiAccount $account): void
+    {
+        $itemIds = DB::transaction(function () use ($account): array {
+            $locked = AiAccount::query()
+                ->whereKey($account->id)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $locked instanceof AiAccount || ! $locked->isParallel()) {
+                return [];
+            }
+
+            $this->releaseStaleDispatches($locked);
+
+            $inFlight = TranslationBatchItem::query()
+                ->where('ai_account_id', $locked->id)
+                ->whereNotNull('dispatched_at')
+                ->whereNull('finished_at')
+                ->count();
+
+            $slots = $locked->parallelLimit() - $inFlight;
+
+            if ($slots <= 0) {
+                return [];
+            }
+
+            $items = TranslationBatchItem::query()
+                ->where('ai_account_id', $locked->id)
+                ->where('status', TranslationBatchItem::STATUS_PENDING)
+                ->whereNull('dispatched_at')
+                ->orderBy('id')
+                ->limit($slots)
+                ->lockForUpdate()
+                ->get(['id']);
+
+            if ($items->isEmpty()) {
+                return [];
+            }
+
+            $ids = $items->pluck('id')->all();
+
+            TranslationBatchItem::query()
+                ->whereIn('id', $ids)
+                ->update(['dispatched_at' => now()]);
+
+            return $ids;
+        });
+
+        foreach ($itemIds as $itemId) {
+            $this->dispatchItemById($itemId);
+        }
+    }
+
+    private function releaseStaleDispatches(AiAccount $account): void
+    {
+        TranslationBatchItem::query()
+            ->where('ai_account_id', $account->id)
+            ->where('status', TranslationBatchItem::STATUS_PENDING)
+            ->whereNotNull('dispatched_at')
+            ->whereNull('started_at')
+            ->where('dispatched_at', '<=', now()->subMinutes(self::DISPATCH_STALE_MINUTES))
+            ->update(['dispatched_at' => null]);
+    }
+
     public function dispatchItemLater(TranslationBatchItem $item, int $seconds, bool $takeover = false): void
     {
         ProcessTranslationBatchItem::dispatch($item->id, $takeover)
@@ -404,7 +496,12 @@ class TranslationBatchService
 
     private function dispatchItem(TranslationBatchItem $item): void
     {
-        ProcessTranslationBatchItem::dispatch($item->id)
+        $this->dispatchItemById($item->id);
+    }
+
+    private function dispatchItemById(int $itemId): void
+    {
+        ProcessTranslationBatchItem::dispatch($itemId)
             ->onQueue('translations')
             ->afterCommit();
     }
