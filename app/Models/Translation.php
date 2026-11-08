@@ -25,6 +25,7 @@ class Translation extends Model
         'total_tokens',
         'latency_ms',
         'provider_response_id',
+        'raw_response',
     ];
 
     protected $hidden = [

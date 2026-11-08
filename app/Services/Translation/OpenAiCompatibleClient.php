@@ -4,28 +4,55 @@ namespace App\Services\Translation;
 
 use App\Models\AiAccount;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class OpenAiCompatibleClient
 {
     /**
      * @param  array<int, array{role: string, content: string}>  $messages
-     * @return array{content: string, usage: array<string, int|null>, id: ?string}
+     * @return array{content: string, usage: array<string, int|null>, id: ?string, finish_reason: ?string}
      */
-    public function chat(AiAccount $account, string $model, array $messages, float $temperature = 0.3): array
-    {
-        $url = $this->endpoint($account->base_url);
+    public function chat(
+        AiAccount $account,
+        string $model,
+        array $messages,
+        float $temperature = 0.3,
+        ?array $responseFormat = null,
+    ): array {
+        $payload = [
+            'model' => $model,
+            'messages' => $messages,
+            'temperature' => $temperature,
+            'stream' => false,
+        ];
 
-        $response = Http::withHeaders($this->headers($account))
-            ->connectTimeout((int) config('ai.connect_timeout', 15))
-            ->timeout((int) config('ai.request_timeout', 300))
-            ->post($url, [
+        if ($responseFormat !== null) {
+            $payload['response_format'] = $responseFormat;
+        }
+
+        $response = $this->send($account, $payload);
+
+        if ($response->failed() && $responseFormat !== null && $this->responseFormatUnsupported($response)) {
+            Log::warning('Il provider non supporta response_format: nuovo tentativo senza schema.', [
+                'account_id' => $account->id,
                 'model' => $model,
-                'messages' => $messages,
-                'temperature' => $temperature,
-                'stream' => false,
+                'status' => $response->status(),
+                'response_format' => $responseFormat['type'] ?? null,
             ]);
+
+            if (($responseFormat['type'] ?? null) === 'json_schema') {
+                $payload['response_format'] = ['type' => 'json_object'];
+                $response = $this->send($account, $payload);
+            }
+
+            if ($response->failed() && isset($payload['response_format']) && $this->responseFormatUnsupported($response)) {
+                unset($payload['response_format']);
+                $response = $this->send($account, $payload);
+            }
+        }
 
         if ($response->failed()) {
             $detail = trim(Str::limit($response->body(), 400));
@@ -45,7 +72,7 @@ class OpenAiCompatibleClient
         $content = data_get($data, 'choices.0.message.content');
 
         if (! is_string($content) || trim($content) === '') {
-            throw new TranslationException(__('messages.translation.provider_empty_response'));
+            throw new TranslationException(__('messages.translation.provider_empty_response'), retryable: true);
         }
 
         return [
@@ -56,7 +83,33 @@ class OpenAiCompatibleClient
                 'total_tokens' => data_get($data, 'usage.total_tokens'),
             ],
             'id' => data_get($data, 'id'),
+            'finish_reason' => data_get($data, 'choices.0.finish_reason'),
         ];
+    }
+
+    private function send(AiAccount $account, array $payload): Response
+    {
+        return Http::withHeaders($this->headers($account))
+            ->connectTimeout((int) config('ai.connect_timeout', 15))
+            ->timeout((int) config('ai.request_timeout', 300))
+            ->post($this->endpoint($account->base_url), $payload);
+    }
+
+    private function responseFormatUnsupported(Response $response): bool
+    {
+        if (! in_array($response->status(), [400, 422], true)) {
+            return false;
+        }
+
+        $body = Str::lower($response->body());
+
+        foreach (['response_format', 'response format', 'json_schema', 'structured output', 'json mode'] as $needle) {
+            if (str_contains($body, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
