@@ -27,6 +27,7 @@ class TranslationCoverageController extends Controller
             ->where('translations.target_language', $data['target_language'])
             ->where('translations.status', 'completed')
             ->where('translations.prompt_version', TranslationPrompt::VERSION)
+            ->whereColumn('translations.source_hash', 'pages.source_hash')
             ->selectRaw('pages.chapter_id, COUNT(DISTINCT pages.id) AS translated')
             ->groupBy('pages.chapter_id')
             ->orderBy('pages.chapter_id')

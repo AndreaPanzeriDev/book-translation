@@ -7,12 +7,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         git \
+        libfreetype6-dev \
         libicu-dev \
+        libjpeg62-turbo-dev \
+        libpng-dev \
         libzip-dev \
         libmariadb-dev \
         libsqlite3-dev \
         unzip \
-    && docker-php-ext-install -j"$(nproc)" intl zip pdo_mysql pdo_sqlite pcntl \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" gd intl zip pdo_mysql pdo_sqlite pcntl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

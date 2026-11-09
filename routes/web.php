@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AiAccountController;
 use App\Http\Controllers\BookController;
+use App\Http\Controllers\BookExportController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\TranslationBatchController;
@@ -18,6 +19,7 @@ Route::patch('/books/{book}', [BookController::class, 'update'])->name('books.up
 Route::delete('/books/{book}', [BookController::class, 'destroy'])->name('books.destroy');
 Route::get('/books/{book}/pages', [PageController::class, 'index'])->name('books.pages');
 Route::get('/books/{book}/translation-coverage', TranslationCoverageController::class)->name('books.translation-coverage');
+Route::post('/books/{book}/export', BookExportController::class)->name('books.export');
 Route::post('/books/{book}/translations', [TranslationController::class, 'store'])->name('translations.store');
 Route::post('/books/{book}/translation-batches', [TranslationBatchController::class, 'store'])->name('translation-batches.store');
 

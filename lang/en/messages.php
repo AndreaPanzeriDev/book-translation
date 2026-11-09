@@ -64,4 +64,11 @@ return [
         'untitled_section' => 'Section :number',
     ],
 
+    'export' => [
+        'incomplete' => 'The selected chapters cannot be exported because some translations are still missing.',
+        'failed' => 'Unable to generate the file. Please try again.',
+        'toc' => 'Table of contents',
+        'translation_into' => 'Translation into :language',
+    ],
+
 ];
