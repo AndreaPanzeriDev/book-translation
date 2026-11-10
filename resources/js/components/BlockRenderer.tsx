@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { splitSentences } from '@/lib/alignment';
 import type { Block } from '@/types';
@@ -104,8 +105,10 @@ export default function BlockRenderer({
     locale,
     sentenceHighlights,
 }: BlockRendererProps) {
+    const { t } = useTranslation();
+
     if (blocks.length === 0) {
-        return <p className="block-placeholder">{placeholder ?? 'Nessun testo.'}</p>;
+        return <p className="block-placeholder">{placeholder ?? t('block.empty')}</p>;
     }
 
     return (

@@ -11,6 +11,8 @@ class AiAccount extends Model
 
     public const REQUEST_MODE_PARALLEL = 'parallel';
 
+    public const DEFAULT_MAX_PARALLEL_REQUESTS = 4;
+
     protected $fillable = [
         'name',
         'provider',
@@ -20,6 +22,7 @@ class AiAccount extends Model
         'extra_headers',
         'is_active',
         'request_mode',
+        'max_parallel_requests',
     ];
 
     protected $hidden = [
@@ -33,6 +36,7 @@ class AiAccount extends Model
             'api_key' => 'encrypted',
             'extra_headers' => 'array',
             'is_active' => 'boolean',
+            'max_parallel_requests' => 'integer',
         ];
     }
 
@@ -51,6 +55,14 @@ class AiAccount extends Model
         return $this->request_mode === self::REQUEST_MODE_PARALLEL;
     }
 
+    public function parallelLimit(): int
+    {
+        return max(
+            1,
+            (int) ($this->max_parallel_requests ?? self::DEFAULT_MAX_PARALLEL_REQUESTS),
+        );
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -64,6 +76,7 @@ class AiAccount extends Model
             'default_model' => $this->default_model,
             'is_active' => (bool) $this->is_active,
             'request_mode' => $this->request_mode ?? self::REQUEST_MODE_SERIAL,
+            'max_parallel_requests' => $this->parallelLimit(),
             'has_api_key' => $this->has_api_key,
             'models' => $this->relationLoaded('models')
                 ? $this->models->map(fn (AiModel $model) => [

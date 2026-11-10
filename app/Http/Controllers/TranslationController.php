@@ -32,7 +32,7 @@ class TranslationController extends Controller
 
         if (! $account) {
             return response()->json([
-                'message' => 'L’account selezionato non è attivo.',
+                'message' => __('messages.accounts.inactive'),
             ], 422);
         }
 

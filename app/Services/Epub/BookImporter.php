@@ -20,7 +20,7 @@ class BookImporter
         $storedPath = Storage::disk('local')->putFile('books', $file);
 
         if (! $storedPath) {
-            throw new InvalidEpubException('Impossibile salvare il file EPUB.');
+            throw new InvalidEpubException(__('messages.epub.save_failed'));
         }
 
         try {

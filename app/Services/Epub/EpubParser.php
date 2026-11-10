@@ -30,33 +30,33 @@ class EpubParser
         $zip = new ZipArchive;
 
         if ($zip->open($path) !== true) {
-            throw new InvalidEpubException('Impossibile aprire il file EPUB.');
+            throw new InvalidEpubException(__('messages.epub.open_failed'));
         }
 
         try {
             $container = $this->readXml($zip, 'META-INF/container.xml');
 
             if (! $container) {
-                throw new InvalidEpubException('Il file non contiene META-INF/container.xml.');
+                throw new InvalidEpubException(__('messages.epub.missing_container'));
             }
 
             $xpath = new DOMXPath($container);
             $rootfile = $xpath->query("//*[local-name()='rootfile']")->item(0);
 
             if (! $rootfile instanceof DOMElement) {
-                throw new InvalidEpubException('Il file EPUB non dichiara un package OPF.');
+                throw new InvalidEpubException(__('messages.epub.missing_opf'));
             }
 
             $opfPath = $this->normalizePath($rootfile->getAttribute('full-path'));
 
             if ($opfPath === '') {
-                throw new InvalidEpubException('Percorso OPF non valido.');
+                throw new InvalidEpubException(__('messages.epub.invalid_opf_path'));
             }
 
             $opf = $this->readXml($zip, $opfPath);
 
             if (! $opf) {
-                throw new InvalidEpubException('Impossibile leggere il package OPF.');
+                throw new InvalidEpubException(__('messages.epub.opf_unreadable'));
             }
 
             $opfDir = dirname($opfPath) === '.' ? '' : dirname($opfPath);
@@ -125,14 +125,14 @@ class EpubParser
                 }
 
                 $chapters[] = [
-                    'title' => $chapterTitle ?: 'Sezione '.(count($chapters) + 1),
+                    'title' => $chapterTitle ?: __('messages.epub.untitled_section', ['number' => count($chapters) + 1]),
                     'href' => $chapterPath,
                     'blocks' => $blocks,
                 ];
             }
 
             if ($chapters === []) {
-                throw new InvalidEpubException('Nessun testo leggibile trovato nell’EPUB.');
+                throw new InvalidEpubException(__('messages.epub.no_text'));
             }
 
             $normalizedLanguage = $language

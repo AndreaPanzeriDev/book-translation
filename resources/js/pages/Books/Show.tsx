@@ -1,26 +1,29 @@
 import {
     ArrowLeftOutlined,
-    CloseOutlined,
     LeftOutlined,
     OrderedListOutlined,
     RightOutlined,
-    StopOutlined,
     ThunderboltOutlined,
     TranslationOutlined,
 } from '@ant-design/icons';
 import { Link, router } from '@inertiajs/react';
-import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Modal, Progress, Select, Spin, Switch, Tag, Tooltip } from 'antd';
+import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Select, Spin, Switch, Tag, Tooltip } from 'antd';
 import axios from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Trans, useTranslation } from 'react-i18next';
 
 import BlockRenderer from '@/components/BlockRenderer';
+import { useTranslationBatch } from '@/contexts/TranslationBatchProvider';
 import AppLayout from '@/layouts/AppLayout';
+import { currentLocale } from '@/i18n';
 import { targetSentenceIndices, type TextSelection } from '@/lib/alignment';
 import { errorMessage, LANGUAGES, languageLabel, providerLabel } from '@/lib/languages';
 import type {
     AiAccount,
     BookSummary,
     ChapterSummary,
+    LastUsedTranslationSlot,
+    LastUsedTranslationSlots,
     PageDetail,
     PageIndexItem,
     RequestMode,
@@ -32,6 +35,7 @@ interface Props {
     chapters: ChapterSummary[];
     pageIndex: PageIndexItem[];
     accounts: AiAccount[];
+    lastUsedSlots: LastUsedTranslationSlots;
 }
 
 type SlotKey = 'a' | 'b';
@@ -39,31 +43,6 @@ type SlotKey = 'a' | 'b';
 interface Slot {
     accountId: number | null;
     model: string;
-}
-
-interface QueueItem {
-    pageId: number;
-    pagePosition: number;
-    slotKey: SlotKey;
-    accountId: number;
-    model: string;
-}
-
-interface BatchFailure extends QueueItem {
-    label: string;
-    message: string;
-}
-
-interface BatchState {
-    running: boolean;
-    cancelled: boolean;
-    total: number;
-    processed: number;
-    succeeded: number;
-    failed: BatchFailure[];
-    currentLabel: string | null;
-    inFlight: number;
-    activePageIds: number[];
 }
 
 function defaultModelFor(account: AiAccount | undefined): string {
@@ -79,6 +58,23 @@ function defaultSlot(accounts: AiAccount[], excludeAccountId?: number | null): S
     }
 
     return { accountId: account.id, model: defaultModelFor(account) };
+}
+
+function slotFromHistory(
+    last: LastUsedTranslationSlot | null | undefined,
+    accounts: AiAccount[],
+): Slot | null {
+    if (!last || last.model.trim() === '') {
+        return null;
+    }
+
+    const account = accounts.find((item) => item.id === last.account_id);
+
+    if (!account || !account.is_active) {
+        return null;
+    }
+
+    return { accountId: account.id, model: last.model };
 }
 
 function mapTranslatedBlocks(page: PageDetail, translation: Translation) {
@@ -141,7 +137,8 @@ function characterOffset(element: HTMLElement, node: Node, offset: number): numb
     return range.toString().length;
 }
 
-function RequestModeTag({ mode }: { mode: RequestMode }) {
+function RequestModeTag({ mode, limit }: { mode: RequestMode; limit?: number }) {
+    const { t } = useTranslation();
     const parallel = mode === 'parallel';
 
     return (
@@ -149,7 +146,11 @@ function RequestModeTag({ mode }: { mode: RequestMode }) {
             color={parallel ? 'blue' : 'default'}
             icon={parallel ? <ThunderboltOutlined /> : <OrderedListOutlined />}
         >
-            {parallel ? 'Parallelo' : 'Serie'}
+            {parallel
+                ? limit !== undefined
+                    ? t('studio.modeParallelLimit', { limit })
+                    : t('studio.modeParallel')
+                : t('studio.modeSerial')}
         </Tag>
     );
 }
@@ -165,6 +166,7 @@ function SlotPicker({
     accounts: AiAccount[];
     onChange: (slot: Slot) => void;
 }) {
+    const { t } = useTranslation();
     const account = accounts.find((item) => item.id === slot.accountId);
     const modelOptions = (account?.models ?? []).map((model) => ({
         value: model.model_id,
@@ -182,14 +184,17 @@ function SlotPicker({
                 {account && (
                     <div className="flex flex-wrap items-center gap-1">
                         <Tag>{providerLabel(account.provider)}</Tag>
-                        <RequestModeTag mode={account.request_mode} />
+                        <RequestModeTag
+                            mode={account.request_mode}
+                            limit={account.max_parallel_requests}
+                        />
                     </div>
                 )}
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
                 <Select
                     value={slot.accountId ?? undefined}
-                    placeholder="Scegli account"
+                    placeholder={t('studio.accountPlaceholder')}
                     options={accounts.map((item) => ({
                         value: item.id,
                         label: item.name,
@@ -203,7 +208,7 @@ function SlotPicker({
                 <AutoComplete
                     value={slot.model}
                     options={modelOptions}
-                    placeholder="ID modello"
+                    placeholder={t('studio.modelPlaceholder')}
                     onChange={(value: string) => onChange({ ...slot, model: value })}
                     filterOption={(input, option) =>
                         String(option?.value ?? '')
@@ -214,15 +219,20 @@ function SlotPicker({
             </div>
             {account && account.models.length === 0 && (
                 <p className="mt-1.5 text-[11px] text-ink-500">
-                    Nessun modello sincronizzato: puoi digitare l’ID manualmente.
+                    {t('studio.noModels')}
                 </p>
             )}
         </div>
     );
 }
 
-export default function Show({ book, chapters, pageIndex, accounts }: Props) {
+export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlots }: Props) {
+    const { t } = useTranslation();
     const { message } = App.useApp();
+    const { startBatch, batchesByBook } = useTranslationBatch();
+    const bookBatch = batchesByBook[book.id];
+    const batchActive =
+        bookBatch?.status === 'queued' || bookBatch?.status === 'running';
 
     const [activeChapterId, setActiveChapterId] = useState<number | null>(() => chapters[0]?.id ?? null);
     const [targetLanguage, setTargetLanguage] = useState(book.target_language);
@@ -231,17 +241,24 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
     const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
     const [pages, setPages] = useState<Record<number, PageDetail>>({});
     const [translationCache, setTranslationCache] = useState<Record<number, Translation[]>>({});
+    const [chapterCoverage, setChapterCoverage] = useState<Record<number, number>>({});
     const [loadingPages, setLoadingPages] = useState(false);
     const [secondColumn, setSecondColumn] = useState(false);
-    const [slotA, setSlotA] = useState<Slot>(() => defaultSlot(accounts));
-    const [slotB, setSlotB] = useState<Slot>(() => defaultSlot(accounts, slotA.accountId));
-    const [batch, setBatch] = useState<BatchState | null>(null);
-    const [failedDetail, setFailedDetail] = useState<BatchFailure | null>(null);
+    const [slotA, setSlotA] = useState<Slot>(
+        () => slotFromHistory(lastUsedSlots.a, accounts) ?? defaultSlot(accounts),
+    );
+    const [slotB, setSlotB] = useState<Slot>(
+        () =>
+            slotFromHistory(lastUsedSlots.b, accounts) ??
+            defaultSlot(accounts, slotA.accountId),
+    );
     const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
+    const [startingBatch, setStartingBatch] = useState(false);
 
-    const cancelRef = useRef(false);
-    const abortRef = useRef<AbortController | null>(null);
+    const translationBusy = batchActive || startingBatch;
+
     const selectionSignatureRef = useRef<string | null>(null);
+    const completedCountRef = useRef(bookBatch?.succeeded ?? 0);
 
     const activeAccounts = useMemo(() => accounts.filter((account) => account.is_active), [accounts]);
     const chapterPages = useMemo(
@@ -293,15 +310,15 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         );
 
         if (modes.size === 1 && modes.has('parallel')) {
-            return 'Modalità parallela: tutte le pagine selezionate partono insieme.';
+            return t('studio.requestModeParallel');
         }
 
         if (modes.size === 1 && modes.has('serial')) {
-            return 'Modalità in serie: una richiesta alla volta per account.';
+            return t('studio.requestModeSerial');
         }
 
-        return 'Modalità per account: serie o parallelo secondo la configurazione del provider.';
-    }, [activeSlots, accounts]);
+        return t('studio.requestModeMixed');
+    }, [activeSlots, accounts, t]);
 
     const findTranslation = (pageId: number, slot: Slot): Translation | undefined => {
         if (!slot.accountId || !slot.model) {
@@ -361,16 +378,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     const next = { ...previous };
 
                     for (const page of data.pages) {
-                        const existing = next[page.id] ?? [];
-                        const merged = [...existing];
-
-                        for (const translation of page.translations) {
-                            if (!merged.some((item) => item.id === translation.id)) {
-                                merged.push(translation);
-                            }
-                        }
-
-                        next[page.id] = merged;
+                        next[page.id] = page.translations;
                     }
 
                     return next;
@@ -389,6 +397,103 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
 
         return () => controller.abort();
     }, [activeChapterId, book.id, message]);
+
+    const completedCount = bookBatch?.succeeded ?? 0;
+
+    useEffect(() => {
+        const account = accounts.find((item) => item.id === slotA.accountId);
+
+        if (!slotA.accountId || slotA.model.trim() === '' || !account || !account.is_active) {
+            setChapterCoverage({});
+
+            return;
+        }
+
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => {
+            axios
+                .get<{ coverage: { chapter_id: number; translated: number }[] }>(
+                    `/books/${book.id}/translation-coverage`,
+                    {
+                        params: {
+                            account_id: slotA.accountId,
+                            model: slotA.model,
+                            target_language: targetLanguage,
+                        },
+                        signal: controller.signal,
+                    },
+                )
+                .then(({ data }) => {
+                    const next: Record<number, number> = {};
+
+                    for (const row of data.coverage) {
+                        next[row.chapter_id] = row.translated;
+                    }
+
+                    setChapterCoverage(next);
+                })
+                .catch((error) => {
+                    if (!axios.isCancel(error)) {
+                        // La copertura è indicativa: i tag cache delle pagine
+                        // restano la fonte principale per il capitolo aperto.
+                    }
+                });
+        }, 200);
+
+        return () => {
+            window.clearTimeout(timer);
+            controller.abort();
+        };
+    }, [accounts, book.id, completedCount, slotA.accountId, slotA.model, targetLanguage]);
+
+    useEffect(() => {
+        if (completedCount <= completedCountRef.current) {
+            completedCountRef.current = completedCount;
+
+            return;
+        }
+
+        completedCountRef.current = completedCount;
+
+        if (!activeChapterId) {
+            return;
+        }
+
+        const controller = new AbortController();
+
+        axios
+            .get<{ pages: PageDetail[] }>(`/books/${book.id}/pages`, {
+                params: { chapter_id: activeChapterId },
+                signal: controller.signal,
+            })
+            .then(({ data }) => {
+                setPages((previous) => {
+                    const next = { ...previous };
+
+                    for (const page of data.pages) {
+                        next[page.id] = page;
+                    }
+
+                    return next;
+                });
+
+                setTranslationCache((previous) => {
+                    const next = { ...previous };
+
+                    for (const page of data.pages) {
+                        next[page.id] = page.translations;
+                    }
+
+                    return next;
+                });
+            })
+            .catch(() => {
+                // Il refresh è silenzioso: la pagina verrà ricaricata al
+                // prossimo aggiornamento del batch o cambio capitolo.
+            });
+
+        return () => controller.abort();
+    }, [completedCount, activeChapterId, book.id]);
 
     useEffect(() => {
         let frame: number | null = null;
@@ -520,25 +625,6 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         setSourceSelection(null);
     }, [activeChapterId]);
 
-    const addTranslation = (translation: Translation) => {
-        setTranslationCache((previous) => {
-            const existing = previous[translation.page_id] ?? [];
-            const filtered = existing.filter(
-                (item) =>
-                    !(
-                        item.ai_account_id === translation.ai_account_id &&
-                        item.model === translation.model &&
-                        item.target_language === translation.target_language
-                    ),
-            );
-
-            return {
-                ...previous,
-                [translation.page_id]: [...filtered, translation],
-            };
-        });
-    };
-
     const togglePage = (pageId: number, index: number) => {
         setSelected((previous) => {
             const next = new Set(previous);
@@ -583,245 +669,64 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
         });
     };
 
-    const buildItems = (pageIds: number[]): QueueItem[] => {
-        const items: QueueItem[] = [];
-        const seen = new Set<string>();
-
-        for (const pageId of pageIds) {
-            const page = pageIndex.find((item) => item.id === pageId);
-
-            for (const { key, slot } of activeSlots) {
-                if (!slot.accountId || !slot.model || !slotIsReady(slot) || findTranslation(pageId, slot)) {
-                    continue;
-                }
-
-                const signature = `${pageId}:${slot.accountId}:${slot.model}`;
-
-                if (seen.has(signature)) {
-                    continue;
-                }
-
-                seen.add(signature);
-
-                items.push({
-                    pageId,
-                    pagePosition: page?.position ?? pageId,
-                    slotKey: key,
-                    accountId: slot.accountId,
-                    model: slot.model,
-                });
-            }
-        }
-
-        return items;
-    };
-
-    const runBatch = async (items: QueueItem[]) => {
-        if (items.length === 0) {
-            void message.info('Tutte le traduzioni richieste sono già in cache.');
+    const launchBatch = async (pageIds: number[]) => {
+        if (startingBatch) {
             return;
         }
 
-        cancelRef.current = false;
-        setFailedDetail(null);
-        const controller = new AbortController();
-        abortRef.current = controller;
-
-        setBatch({
-            running: true,
-            cancelled: false,
-            total: items.length,
-            processed: 0,
-            succeeded: 0,
-            failed: [],
-            currentLabel: null,
-            inFlight: 0,
-            activePageIds: [],
-        });
-
-        let processed = 0;
-        let succeeded = 0;
-        const failed: BatchFailure[] = [];
-        const inFlightByPage = new Map<number, number>();
-        const inFlightLabels = new Map<string, string>();
-
-        const syncProgress = () => {
-            const activePageIds = Array.from(inFlightByPage.keys());
-            const inFlight = Array.from(inFlightByPage.values()).reduce(
-                (total, count) => total + count,
-                0,
-            );
-
-            setBatch((previous) =>
-                previous
-                    ? {
-                          ...previous,
-                          processed,
-                          succeeded,
-                          failed: [...failed],
-                          inFlight,
-                          activePageIds,
-                          currentLabel:
-                              inFlight === 1
-                                  ? (Array.from(inFlightLabels.values())[0] ?? null)
-                                  : null,
-                      }
-                    : previous,
-            );
-        };
-
-        const processItem = async (item: QueueItem) => {
-            if (cancelRef.current) {
-                return;
-            }
-
-            const label = `Pagina ${item.pagePosition} · ${item.model}`;
-            const itemKey = `${item.pageId}:${item.slotKey}:${item.accountId}:${item.model}`;
-
-            inFlightByPage.set(item.pageId, (inFlightByPage.get(item.pageId) ?? 0) + 1);
-            inFlightLabels.set(itemKey, label);
-            syncProgress();
-
-            let finished = false;
-
-            try {
-                const { data } = await axios.post<{ translation: Translation }>(
-                    `/books/${book.id}/translations`,
-                    {
-                        page_id: item.pageId,
-                        account_id: item.accountId,
-                        model: item.model,
-                        target_language: targetLanguage,
-                    },
-                    { signal: controller.signal },
-                );
-
-                addTranslation(data.translation);
-                succeeded += 1;
-                finished = true;
-            } catch (error) {
-                if (axios.isCancel(error)) {
-                    return;
-                }
-
-                failed.push({ ...item, label, message: errorMessage(error) });
-                finished = true;
-            } finally {
-                inFlightLabels.delete(itemKey);
-                const remaining = (inFlightByPage.get(item.pageId) ?? 1) - 1;
-
-                if (remaining <= 0) {
-                    inFlightByPage.delete(item.pageId);
-                } else {
-                    inFlightByPage.set(item.pageId, remaining);
-                }
-
-                if (finished) {
-                    processed += 1;
-                }
-
-                syncProgress();
-            }
-        };
-
-        const groups = new Map<number, QueueItem[]>();
-
-        for (const item of items) {
-            const group = groups.get(item.accountId) ?? [];
-            group.push(item);
-            groups.set(item.accountId, group);
+        if (pageIds.length === 0) {
+            void message.warning(t('studio.selectPageWarning'));
+            return;
         }
 
-        const runGroup = async (accountId: number, group: QueueItem[]) => {
-            const mode =
-                accounts.find((account) => account.id === accountId)?.request_mode ?? 'serial';
-
-            if (mode === 'parallel') {
-                await Promise.all(group.map((item) => processItem(item)));
-                return;
-            }
-
-            for (const item of group) {
-                if (cancelRef.current) {
-                    return;
-                }
-
-                await processItem(item);
-            }
-        };
-
-        await Promise.all(
-            Array.from(groups.entries()).map(([accountId, group]) => runGroup(accountId, group)),
-        );
-
-        if (abortRef.current === controller) {
-            abortRef.current = null;
+        if (!slotsReady) {
+            void message.warning(t('studio.slotsWarning'));
+            return;
         }
 
-        const cancelled = cancelRef.current;
-
-        setBatch((previous) =>
-            previous
-                ? {
-                      ...previous,
-                      running: false,
-                      cancelled,
-                      currentLabel: null,
-                      inFlight: 0,
-                      activePageIds: [],
-                      processed,
-                      succeeded,
-                      failed: [...failed],
-                  }
-                : previous,
+        const slots = activeSlots.flatMap(({ key, slot }) =>
+            slot.accountId === null
+                ? []
+                : [
+                      {
+                          slot_key: key,
+                          account_id: slot.accountId,
+                          model: slot.model.trim(),
+                      },
+                  ],
         );
 
-        if (!cancelled && failed.length === 0) {
-            void message.success(`Traduzione completata: ${succeeded} ${succeeded === 1 ? 'pagina' : 'pagine'}.`);
-        } else if (failed.length > 0) {
-            void message.warning(
-                `${failed.length} ${failed.length === 1 ? 'traduzione non riuscita' : 'traduzioni non riuscite'}. Controlla il pannello.`,
-            );
+        setStartingBatch(true);
+
+        try {
+            const result = await startBatch(book.id, {
+                slots,
+                page_ids: pageIds,
+                target_language: targetLanguage,
+            });
+
+            if (result.batch) {
+                void message.success(t('studio.batchStarted'));
+            } else {
+                void message.info(result.message ?? t('studio.allCached'));
+            }
+        } catch (error) {
+            void message.error(errorMessage(error));
+        } finally {
+            setStartingBatch(false);
         }
     };
 
     const startTranslation = () => {
-        if (selected.size === 0) {
-            void message.warning('Seleziona almeno una pagina.');
-            return;
-        }
-
-        if (!slotsReady) {
-            void message.warning('Scegli account e modello per ogni colonna di traduzione.');
-            return;
-        }
-
-        void runBatch(buildItems(Array.from(selected)));
+        void launchBatch(Array.from(selected));
     };
 
     const translatePage = (pageId: number) => {
-        if (!slotsReady) {
-            void message.warning('Scegli account e modello per ogni colonna di traduzione.');
+        if (translationBusy) {
             return;
         }
 
-        void runBatch(buildItems([pageId]));
-    };
-
-    const retryFailed = () => {
-        if (!batch || batch.failed.length === 0) {
-            return;
-        }
-
-        const items = batch.failed.map(({ pageId, pagePosition, slotKey, accountId, model }) => ({
-            pageId,
-            pagePosition,
-            slotKey,
-            accountId,
-            model,
-        }));
-
-        void runBatch(items);
+        void launchBatch([pageId]);
     };
 
     const updateSlot = (key: SlotKey, slot: Slot) => {
@@ -843,26 +748,21 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
     const coverageByChapter = useMemo(() => {
         const coverage: Record<number, { translated: number; total: number }> = {};
 
-        if (!slotIsReady(slotA)) {
-            return coverage;
-        }
-
         for (const chapter of chapters) {
-            const pagesOfChapter = pageIndex.filter((page) => page.chapter_id === chapter.id);
-            const translated = pagesOfChapter.filter((page) => findTranslation(page.id, slotA)).length;
-
-            coverage[chapter.id] = { translated, total: pagesOfChapter.length };
+            coverage[chapter.id] = {
+                translated: chapterCoverage[chapter.id] ?? 0,
+                total: chapter.pages_count,
+            };
         }
 
         return coverage;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chapters, pageIndex, translationCache, slotA, targetLanguage]);
+    }, [chapters, chapterCoverage]);
 
     return (
         <AppLayout>
             <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
                 <div className="flex min-w-0 items-start gap-3">
-                    <Button icon={<ArrowLeftOutlined />} onClick={() => router.visit('/')} aria-label="Torna alla libreria" />
+                    <Button icon={<ArrowLeftOutlined />} onClick={() => router.visit('/')} aria-label={t('studio.backAria')} />
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <h1 className="truncate font-reading text-2xl text-ink-900 md:text-3xl">
@@ -873,24 +773,27 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                             </Tag>
                         </div>
                         <p className="mt-1 text-sm text-ink-500">
-                            {book.author ?? 'Autore sconosciuto'} · {book.chapters_count}{' '}
-                            {book.chapters_count === 1 ? 'capitolo' : 'capitoli'} ·{' '}
-                            {book.pages_count}{' '}
-                            {book.pages_count === 1 ? 'pagina virtuale' : 'pagine virtuali'} ·{' '}
-                            {book.page_char_limit}{' '}
-                            {book.page_char_limit === 1 ? 'carattere' : 'caratteri'} per pagina
+                            {book.author ?? t('common.authorUnknown')} ·{' '}
+                            {t('common.chapters', { count: book.chapters_count })} ·{' '}
+                            {t('common.virtualPages', { count: book.pages_count })} ·{' '}
+                            {t('studio.charsPerPage', { count: book.page_char_limit })}
                         </p>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs uppercase tracking-wide text-ink-500">Lingua di destinazione</span>
+                    <span className="text-xs uppercase tracking-wide text-ink-500">
+                        {t('studio.targetLanguage')}
+                    </span>
                     <Select
                         value={targetLanguage}
-                        options={LANGUAGES}
+                        options={LANGUAGES.map((language) => ({
+                            value: language,
+                            label: languageLabel(language),
+                        }))}
                         onChange={updateTargetLanguage}
                         loading={savingTargetLanguage}
-                        disabled={batch?.running}
+                        disabled={translationBusy}
                         style={{ width: 150 }}
                         showSearch
                         optionFilterProp="label"
@@ -903,12 +806,12 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     className="mb-4"
                     type="warning"
                     showIcon
-                    title="Nessun account AI attivo"
+                    title={t('studio.noAccountsTitle')}
                     description={
-                        <span>
-                            <Link href="/accounts">Configura un account</Link> e sincronizza i modelli per
-                            iniziare a tradurre.
-                        </span>
+                        <Trans
+                            i18nKey="studio.noAccountsDescription"
+                            components={{ link: <Link href="/accounts" /> }}
+                        />
                     }
                 />
             )}
@@ -917,7 +820,9 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                 <aside className="space-y-4">
                     <div className="rounded-xl border border-parchment-200 bg-white p-3 shadow-sm">
                         <div className="mb-2 flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-ink-900">Capitoli</h2>
+                            <h2 className="text-sm font-semibold text-ink-900">
+                                {t('studio.chaptersTitle')}
+                            </h2>
                             <Tag>{chapters.length}</Tag>
                         </div>
                         <div className="max-h-[52vh] space-y-0.5 overflow-y-auto pr-1">
@@ -972,14 +877,16 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
 
                         <div className="grid gap-2">
                             <Button size="small" onClick={toggleChapter} disabled={chapterPages.length === 0}>
-                                {chapterFullySelected ? 'Deseleziona capitolo' : 'Seleziona capitolo'}
+                                {chapterFullySelected
+                                    ? t('studio.deselectChapter')
+                                    : t('studio.selectChapter')}
                             </Button>
                             <Button size="small" onClick={() => setSelected(new Set(pageIndex.map((page) => page.id)))}>
-                                Tutto il libro ({pageIndex.length})
+                                {t('studio.selectAll', { count: pageIndex.length })}
                             </Button>
                             {selected.size > 0 && (
                                 <Button size="small" type="text" danger onClick={() => setSelected(new Set())}>
-                                    Azzera selezione
+                                    {t('studio.clearSelection')}
                                 </Button>
                             )}
                         </div>
@@ -989,12 +896,14 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                         <div className="flex items-end justify-between">
                             <span className="text-3xl font-semibold text-ink-900">{selected.size}</span>
                             <span className="pb-1 text-xs text-ink-500">
-                                {selected.size === 1 ? 'pagina selezionata' : 'pagine selezionate'}
+                                {t('studio.selectedPages', { count: selected.size })}
                             </span>
                         </div>
                         <p className="mt-0.5 text-xs text-ink-500">
-                            {selectedChars.toLocaleString('it-IT')}{' '}
-                            {selectedChars === 1 ? 'carattere' : 'caratteri'} da tradurre
+                            {t('studio.charsToTranslate', {
+                                count: selectedChars,
+                                value: selectedChars.toLocaleString(currentLocale()),
+                            })}
                         </p>
 
                         <Button
@@ -1004,14 +913,13 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                             className="mt-3"
                             icon={<TranslationOutlined />}
                             onClick={startTranslation}
-                            disabled={selected.size === 0 || !slotsReady || batch?.running}
-                            loading={batch?.running}
+                            disabled={selected.size === 0 || !slotsReady || translationBusy}
+                            loading={translationBusy}
                         >
-                            Traduci selezione
+                            {translationBusy ? t('studio.translating') : t('studio.translateSelection')}
                         </Button>
                         <p className="mt-2 text-[11px] leading-snug text-ink-500">
-                            {requestModeSummary} Le traduzioni già in cache vengono saltate
-                            automaticamente.
+                            {requestModeSummary} {t('studio.cacheHint')}
                         </p>
                     </div>
                 </aside>
@@ -1025,15 +933,17 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                         size="small"
                                         icon={<LeftOutlined />}
                                         onClick={() => setActiveChapterId(previousChapter.id)}
-                                        aria-label="Capitolo precedente"
+                                        aria-label={t('studio.previousChapterAria')}
                                     />
                                 )}
                                 <div className="min-w-0">
                                     <p className="text-[11px] uppercase tracking-wide text-ink-500">
-                                        Capitolo {activeChapter?.position ?? '—'}
+                                        {t('studio.chapterLabel', {
+                                            position: activeChapter?.position ?? '—',
+                                        })}
                                     </p>
                                     <h2 className="truncate text-lg font-semibold text-ink-900">
-                                        {activeChapter?.title ?? 'Seleziona un capitolo'}
+                                        {activeChapter?.title ?? t('studio.chapterPlaceholder')}
                                     </h2>
                                 </div>
                                 {nextChapter && (
@@ -1041,27 +951,29 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                         size="small"
                                         icon={<RightOutlined />}
                                         onClick={() => setActiveChapterId(nextChapter.id)}
-                                        aria-label="Capitolo successivo"
+                                        aria-label={t('studio.nextChapterAria')}
                                     />
                                 )}
                             </div>
 
                             <div className="flex items-center gap-3">
-                                <span className="text-xs text-ink-500">Confronta due traduzioni</span>
+                                <span className="text-xs text-ink-500">
+                                    {t('studio.compareToggle')}
+                                </span>
                                 <Switch checked={secondColumn} onChange={toggleSecondColumn} />
                             </div>
                         </div>
 
                         <div className={secondColumn ? 'grid gap-3 md:grid-cols-2' : 'grid gap-3'}>
                             <SlotPicker
-                                label="Traduzione 1"
+                                label={t('studio.slot1')}
                                 slot={slotA}
                                 accounts={accounts}
                                 onChange={(slot) => updateSlot('a', slot)}
                             />
                             {secondColumn && (
                                 <SlotPicker
-                                    label="Traduzione 2"
+                                    label={t('studio.slot2')}
                                     slot={slotB}
                                     accounts={accounts}
                                     onChange={(slot) => updateSlot('b', slot)}
@@ -1072,13 +984,13 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
 
                     {loadingPages && chapterPages.every((page) => !pages[page.id]) ? (
                         <div className="flex justify-center rounded-xl border border-parchment-200 bg-white py-20">
-                            <Spin description="Caricamento pagine…" size="large">
+                            <Spin description={t('studio.loadingPages')} size="large">
                                 <div className="h-24 w-1" />
                             </Spin>
                         </div>
                     ) : chapterPages.length === 0 ? (
                         <div className="rounded-xl border border-parchment-200 bg-white py-16">
-                            <Empty description="Questo capitolo non contiene pagine." />
+                            <Empty description={t('studio.emptyChapter')} />
                         </div>
                     ) : (
                         <div className="space-y-5">
@@ -1107,29 +1019,37 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                     }}
                                                 />
                                                 <span className="text-sm font-medium text-ink-900">
-                                                    Pagina {info.position}
+                                                    {t('studio.pageLabel', {
+                                                        position: info.position,
+                                                    })}
                                                 </span>
-                                                <Tag>cap. {info.chapter_position}</Tag>
+                                                <Tag>
+                                                    {t('studio.chapterTag', {
+                                                        position: info.chapter_position,
+                                                    })}
+                                                </Tag>
                                                 <span className="text-xs text-ink-500">
-                                                    {info.char_count}{' '}
-                                                    {info.char_count === 1 ? 'carattere' : 'caratteri'}
+                                                    {t('common.characters', {
+                                                        count: info.char_count,
+                                                    })}
                                                 </span>
                                                 <span className="hidden text-[11px] text-ink-500 md:inline">
-                                                    Shift + clic per selezionare un intervallo
+                                                    {t('studio.shiftHint')}
                                                 </span>
                                             </div>
 
                                             <div className="flex items-center gap-2">
-                                                {batch?.running && batch.activePageIds.includes(info.id) && (
-                                                    <Spin size="small" />
-                                                )}
+                                                {batchActive &&
+                                                    (bookBatch?.active_page_ids.includes(info.id) ?? false) && (
+                                                        <Spin size="small" />
+                                                    )}
                                                 <Button
                                                     size="small"
                                                     icon={<ThunderboltOutlined />}
                                                     onClick={() => translatePage(info.id)}
-                                                    disabled={!slotsReady || batch?.running}
+                                                    disabled={!slotsReady || translationBusy}
                                                 >
-                                                    Traduci
+                                                    {t('studio.translate')}
                                                 </Button>
                                             </div>
                                         </div>
@@ -1153,7 +1073,11 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                 >
                                                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-parchment-200 pb-2">
                                                         <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                                                            Originale · {languageLabel(book.language)}
+                                                            {t('studio.originalLabel', {
+                                                                language: languageLabel(
+                                                                    book.language,
+                                                                ),
+                                                            })}
                                                         </span>
                                                         <span className="text-[11px] text-ink-500">
                                                             {page.source_hash.slice(0, 8)}
@@ -1163,8 +1087,7 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                         findTranslation(info.id, slot),
                                                     ) && (
                                                         <p className="mb-2 text-[11px] text-ink-500">
-                                                            Seleziona una frase per evidenziare la
-                                                            traduzione corrispondente.
+                                                            {t('studio.selectionHint')}
                                                         </p>
                                                     )}
                                                     <BlockRenderer
@@ -1198,15 +1121,23 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                         >
                                                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-parchment-200 pb-2">
                                                                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                                                                    Traduzione {key === 'a' ? '1' : '2'}
+                                                                    {t('studio.translationLabel', {
+                                                                        number:
+                                                                            key === 'a'
+                                                                                ? '1'
+                                                                                : '2',
+                                                                    })}
                                                                 </span>
                                                                 <div className="flex flex-wrap items-center gap-1">
                                                                     <Tag>
-                                                                        {account?.name ?? 'Account mancante'}
+                                                                        {account?.name ??
+                                                                            t('studio.accountMissing')}
                                                                     </Tag>
                                                                     {translation && (
-                                                                        <Tooltip title="Traduzione già in cache">
-                                                                            <Tag color="green">cache</Tag>
+                                                                        <Tooltip title={t('studio.cachedTooltip')}>
+                                                                            <Tag color="green">
+                                                                                {t('studio.cacheTag')}
+                                                                            </Tag>
                                                                         </Tooltip>
                                                                     )}
                                                                 </div>
@@ -1225,7 +1156,9 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                                         </Tag>
                                                                         {translation.total_tokens != null && (
                                                                             <span>
-                                                                                {translation.total_tokens} token
+                                                                                {t('studio.tokens', {
+                                                                                    count: translation.total_tokens,
+                                                                                })}
                                                                             </span>
                                                                         )}
                                                                         {translation.latency_ms != null && (
@@ -1244,15 +1177,15 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                                                                     <TranslationOutlined className="text-2xl text-parchment-300" />
                                                                     <p className="max-w-[26ch] text-sm text-ink-500">
                                                                         {ready
-                                                                            ? 'Nessuna traduzione in cache per questo account e modello.'
-                                                                            : 'Scegli un account attivo e un modello per questa colonna.'}
+                                                                            ? t('studio.emptyTranslationReady')
+                                                                            : t('studio.emptyTranslationNotReady')}
                                                                     </p>
                                                                     <Button
                                                                         size="small"
                                                                         onClick={() => translatePage(info.id)}
-                                                                        disabled={!ready || batch?.running}
+                                                                        disabled={!ready || translationBusy}
                                                                     >
-                                                                        Traduci ora
+                                                                        {t('studio.translateNow')}
                                                                     </Button>
                                                                 </div>
                                                             )}
@@ -1268,132 +1201,6 @@ export default function Show({ book, chapters, pageIndex, accounts }: Props) {
                     )}
                 </section>
             </div>
-
-            {batch && (
-                <div className="fixed bottom-4 right-4 z-40 w-[calc(100%-2rem)] max-w-md rounded-xl border border-parchment-200 bg-white p-4 shadow-2xl">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                        <strong className="text-sm text-ink-900">
-                            {batch.running
-                                ? 'Traduzione in corso'
-                                : batch.cancelled
-                                  ? 'Traduzione interrotta'
-                                  : 'Traduzione completata'}
-                        </strong>
-                        <Button
-                            type="text"
-                            size="small"
-                            icon={<CloseOutlined />}
-                            onClick={() => setBatch(null)}
-                            disabled={batch.running}
-                            aria-label="Chiudi pannello"
-                        />
-                    </div>
-
-                    <Progress
-                        percent={
-                            batch.total === 0
-                                ? 100
-                                : Math.round((batch.processed / batch.total) * 100)
-                        }
-                        status={batch.failed.length > 0 ? 'exception' : batch.running ? 'active' : 'normal'}
-                        size="small"
-                    />
-
-                    <div className="mt-1 flex items-center justify-between text-xs text-ink-500">
-                        <span>
-                            {batch.processed} / {batch.total}
-                        </span>
-                        <span>
-                            {batch.succeeded} {batch.succeeded === 1 ? 'riuscita' : 'riuscite'} ·{' '}
-                            {batch.failed.length}{' '}
-                            {batch.failed.length === 1 ? 'errore' : 'errori'}
-                        </span>
-                    </div>
-
-                    {batch.inFlight > 0 && (
-                        <p className="mt-2 truncate text-xs text-ink-700">
-                            {batch.inFlight === 1 && batch.currentLabel
-                                ? `In corso: ${batch.currentLabel}`
-                                : `${batch.inFlight} richieste in corso`}
-                        </p>
-                    )}
-
-                    {batch.failed.length > 0 && (
-                        <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md bg-red-50 p-2 text-[11px] text-red-700">
-                            {batch.failed.map((failure, index) => (
-                                <button
-                                    key={`${failure.pageId}-${failure.slotKey}-${index}`}
-                                    type="button"
-                                    className="block w-full cursor-pointer truncate text-left hover:underline"
-                                    title="Clicca per vedere l’errore completo"
-                                    onClick={() => setFailedDetail(failure)}
-                                >
-                                    <span className="font-medium">{failure.label}:</span>{' '}
-                                    {failure.message}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                    <div className="mt-3 flex gap-2">
-                        {batch.running ? (
-                            <Button
-                                danger
-                                block
-                                icon={<StopOutlined />}
-                                onClick={() => {
-                                    cancelRef.current = true;
-                                    abortRef.current?.abort();
-                                }}
-                            >
-                                Interrompi
-                            </Button>
-                        ) : (
-                            <>
-                                {batch.failed.length > 0 && (
-                                    <Button type="primary" block onClick={retryFailed}>
-                                        Riprova {batch.failed.length}
-                                    </Button>
-                                )}
-                                <Button block onClick={() => setBatch(null)}>
-                                    Chiudi
-                                </Button>
-                            </>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            <Modal
-                title={failedDetail?.label ?? 'Dettaglio errore'}
-                open={failedDetail !== null}
-                onCancel={() => setFailedDetail(null)}
-                footer={[
-                    <Button
-                        key="copy"
-                        onClick={() => {
-                            if (!failedDetail) {
-                                return;
-                            }
-
-                            navigator.clipboard
-                                .writeText(failedDetail.message)
-                                .then(() => message.success('Errore copiato negli appunti.'))
-                                .catch(() => message.error('Impossibile copiare l’errore.'));
-                        }}
-                    >
-                        Copia
-                    </Button>,
-                    <Button key="close" type="primary" onClick={() => setFailedDetail(null)}>
-                        Chiudi
-                    </Button>,
-                ]}
-                width={640}
-            >
-                <p className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-red-50 p-3 font-mono text-xs text-red-700">
-                    {failedDetail?.message}
-                </p>
-            </Modal>
         </AppLayout>
     );
 }

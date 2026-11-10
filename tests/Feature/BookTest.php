@@ -1,8 +1,14 @@
 <?php
 
+use App\Models\AiAccount;
 use App\Models\Book;
+use App\Models\Chapter;
 use App\Models\Page;
+use App\Models\Translation;
+use App\Models\TranslationBatch;
+use App\Models\TranslationBatchItem;
 use App\Services\Epub\BookImporter;
+use App\Services\Translation\TranslationPrompt;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -19,6 +25,61 @@ function uploadTestEpub(): UploadedFile
     EpubFixture::create($path);
 
     return new UploadedFile($path, 'il-faro.epub', 'application/epub+zip', null, true);
+}
+
+/**
+ * @return array{0: Book, 1: Page, 2: AiAccount, 3: AiAccount}
+ */
+function makeLastUsedSlotsFixture(): array
+{
+    $book = Book::create([
+        'title' => 'Atlante delle maree',
+        'author' => 'Ada Lovelace',
+        'language' => 'en',
+        'original_filename' => 'atlante.epub',
+        'file_path' => 'books/atlante.epub',
+        'page_char_limit' => 1500,
+        'target_language' => 'it',
+    ]);
+
+    $chapter = Chapter::create([
+        'book_id' => $book->id,
+        'position' => 1,
+        'title' => 'Capitolo primo',
+    ]);
+
+    $text = 'Testo della pagina.';
+
+    $page = Page::create([
+        'book_id' => $book->id,
+        'chapter_id' => $chapter->id,
+        'position' => 1,
+        'chapter_position' => 1,
+        'char_count' => strlen($text),
+        'source_hash' => hash('sha256', $text),
+    ]);
+
+    $accountA = AiAccount::create([
+        'name' => 'Account A',
+        'provider' => 'custom',
+        'base_url' => 'https://a.example.com/v1',
+        'api_key' => 'secret-key-a',
+        'default_model' => 'default-a',
+        'is_active' => true,
+        'request_mode' => 'serial',
+    ]);
+
+    $accountB = AiAccount::create([
+        'name' => 'Account B',
+        'provider' => 'custom',
+        'base_url' => 'https://b.example.com/v1',
+        'api_key' => 'secret-key-b',
+        'default_model' => 'default-b',
+        'is_active' => true,
+        'request_mode' => 'serial',
+    ]);
+
+    return [$book, $page, $accountA, $accountB];
 }
 
 it('importa un EPUB caricato e crea capitoli, pagine e blocchi', function () {
@@ -106,4 +167,82 @@ it('rifiuta una lingua di destinazione non valida', function () {
     $this->patchJson(route('books.update', $book), ['target_language' => ''])
         ->assertStatus(422)
         ->assertJsonValidationErrors('target_language');
+});
+
+it('ripristina gli ultimi account e modelli usati per il libro', function () {
+    [$book, $page, $accountA, $accountB] = makeLastUsedSlotsFixture();
+
+    $oldBatch = TranslationBatch::create([
+        'book_id' => $book->id,
+        'target_language' => 'it',
+        'status' => TranslationBatch::STATUS_COMPLETED,
+        'total_items' => 2,
+    ]);
+
+    $oldBatch->items()->create([
+        'page_id' => $page->id,
+        'ai_account_id' => $accountA->id,
+        'model' => 'model-a-old',
+        'slot_key' => 'a',
+        'page_position' => $page->position,
+        'status' => TranslationBatchItem::STATUS_COMPLETED,
+    ]);
+
+    $oldBatch->items()->create([
+        'page_id' => $page->id,
+        'ai_account_id' => $accountB->id,
+        'model' => 'model-b-old',
+        'slot_key' => 'b',
+        'page_position' => $page->position,
+        'status' => TranslationBatchItem::STATUS_COMPLETED,
+    ]);
+
+    $newBatch = TranslationBatch::create([
+        'book_id' => $book->id,
+        'target_language' => 'it',
+        'status' => TranslationBatch::STATUS_COMPLETED,
+        'total_items' => 1,
+    ]);
+
+    $newBatch->items()->create([
+        'page_id' => $page->id,
+        'ai_account_id' => $accountA->id,
+        'model' => 'model-a-new',
+        'slot_key' => 'a',
+        'page_position' => $page->position,
+        'status' => TranslationBatchItem::STATUS_COMPLETED,
+    ]);
+
+    $this->get(route('books.show', $book))
+        ->assertOk()
+        ->assertInertia(fn (Assert $inertia) => $inertia
+            ->component('Books/Show')
+            ->where('lastUsedSlots.a.account_id', $accountA->id)
+            ->where('lastUsedSlots.a.model', 'model-a-new')
+            ->where('lastUsedSlots.b.account_id', $accountB->id)
+            ->where('lastUsedSlots.b.model', 'model-b-old'));
+});
+
+it('usa l ultima traduzione come fallback quando non ci sono batch', function () {
+    [$book, $page, $accountA] = makeLastUsedSlotsFixture();
+
+    Translation::create([
+        'page_id' => $page->id,
+        'ai_account_id' => $accountA->id,
+        'model' => 'legacy-model',
+        'target_language' => 'it',
+        'source_hash' => $page->source_hash,
+        'prompt_version' => TranslationPrompt::VERSION,
+        'params_hash' => hash('sha256', 'params'),
+        'key_hash' => hash('sha256', 'legacy-key'),
+        'status' => 'completed',
+    ]);
+
+    $this->get(route('books.show', $book))
+        ->assertOk()
+        ->assertInertia(fn (Assert $inertia) => $inertia
+            ->component('Books/Show')
+            ->where('lastUsedSlots.a.account_id', $accountA->id)
+            ->where('lastUsedSlots.a.model', 'legacy-model')
+            ->where('lastUsedSlots.b', null));
 });

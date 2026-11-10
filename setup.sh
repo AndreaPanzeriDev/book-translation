@@ -7,7 +7,7 @@
 #   2. crea .env da .env.example (se manca) con password del database casuali;
 #   3. verifica le porte definite in .env e, se occupate, ne propone altre;
 #   4. costruisce l'immagine dell'applicazione (PHP 8.5 + Node 22 + Composer);
-#   5. avvia i container app + MariaDB;
+#   5. avvia i container app + queue + MariaDB;
 #   6. attende che il database sia pronto, verifica che le credenziali di .env
 #      siano valide e, se il volume è di un'installazione precedente, propone
 #      di ricrearlo;
@@ -315,9 +315,17 @@ app_running() {
     [[ -n "$cid" ]] && [[ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" == "true" ]]
 }
 
+queue_running() {
+    local cid
+    cid="$(docker compose ps -q queue 2>/dev/null || true)"
+    [[ -n "$cid" ]] && [[ "$(docker inspect -f '{{.State.Running}}' "$cid" 2>/dev/null || echo false)" == "true" ]]
+}
+
 dump_logs() {
     printf '\n%s--- ultime righe di "docker compose logs app" ---%s\n' "$C_DIM" "$C_RESET" >&2
     docker compose logs --tail 60 app >&2 || true
+    printf '\n%s--- ultime righe di "docker compose logs queue" ---%s\n' "$C_DIM" "$C_RESET" >&2
+    docker compose logs --tail 30 queue >&2 || true
     printf '%s---------------------------------------------------%s\n\n' "$C_DIM" "$C_RESET" >&2
 }
 
@@ -390,6 +398,11 @@ fi
 [[ -n "$(env_get APP_PORT)" ]]          || env_set APP_PORT 8000
 [[ -n "$(env_get VITE_PORT)" ]]         || env_set VITE_PORT 5173
 [[ -n "$(env_get DB_EXTERNAL_PORT)" ]]  || env_set DB_EXTERNAL_PORT 3307
+[[ -n "$(env_get QUEUE_WORKERS)" ]]          || env_set QUEUE_WORKERS 4
+[[ -n "$(env_get QUEUE_JOB_TIMEOUT)" ]]      || env_set QUEUE_JOB_TIMEOUT 360
+[[ -n "$(env_get DB_QUEUE_RETRY_AFTER)" ]]   || env_set DB_QUEUE_RETRY_AFTER 600
+[[ -n "$(env_get QUEUE_WORKER_MAX_TIME)" ]]  || env_set QUEUE_WORKER_MAX_TIME 3600
+[[ -n "$(env_get QUEUE_WORKER_MAX_JOBS)" ]]  || env_set QUEUE_WORKER_MAX_JOBS 500
 
 # APP_KEY va scritta PRIMA di avviare i container: le variabili d'ambiente
 # hanno precedenza sul file .env, quindi un key generato a container avviato
@@ -425,7 +438,7 @@ if [[ "$DB_CONNECTION" == "mysql" || "$DB_CONNECTION" == "mariadb" ]]; then
 fi
 ok "Database: $DB_DATABASE su $DB_HOST"
 
-chmod +x docker/entrypoint.sh 2>/dev/null || true
+chmod +x docker/entrypoint.sh docker/queue-entrypoint.sh 2>/dev/null || true
 
 # ----------------------------------------------------- configurazione porte -
 step "Configurazione delle porte"
@@ -469,9 +482,9 @@ fi
 if [[ $SKIP_BUILD -eq 0 ]]; then
     step "Build dell'immagine Docker (PHP 8.5 + Node 22)"
     if [[ $REBUILD -eq 1 ]]; then
-        docker compose build --no-cache app
+        docker compose build --no-cache app queue
     else
-        docker compose build app
+        docker compose build app queue
     fi
     ok "Immagine aggiornata"
 else
@@ -594,6 +607,20 @@ if ! docker compose exec -T app sh -c 'grep -q "^APP_KEY=base64:" .env'; then
 fi
 ok "APP_KEY presente e caricata"
 
+queue_ready=0
+for _ in $(seq 1 15); do
+    if queue_running; then
+        queue_ready=1
+        break
+    fi
+    sleep 2
+done
+if [[ $queue_ready -eq 1 ]]; then
+    ok "Worker di traduzione attivi ($(env_get QUEUE_WORKERS 4) processi)"
+else
+    warn "Il container queue non risulta attivo: controlla 'docker compose logs queue'"
+fi
+
 step "Verifica della pagina iniziale"
 http_status='000'
 for _ in $(seq 1 10); do
@@ -629,6 +656,7 @@ ${C_GREEN}${C_BOLD}✔ Book Translation Studio è pronto${C_RESET}
 
   Comandi utili
     docker compose logs -f app      log di Laravel e Vite
+    docker compose logs -f queue    log dei worker di traduzione
     docker compose exec app bash    shell nel container
     make down                       arresta tutto
     ./setup.sh                      riallinea e riavvia (idempotente)

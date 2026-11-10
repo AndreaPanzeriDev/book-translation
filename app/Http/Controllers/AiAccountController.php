@@ -33,6 +33,7 @@ class AiAccountController extends Controller
         $data = $this->validated($request);
         $data['is_active'] = $request->boolean('is_active', true);
         $data['request_mode'] ??= AiAccount::REQUEST_MODE_SERIAL;
+        $data['max_parallel_requests'] ??= AiAccount::DEFAULT_MAX_PARALLEL_REQUESTS;
 
         $account = AiAccount::create($data);
 
@@ -41,23 +42,25 @@ class AiAccountController extends Controller
         } catch (TranslationException $e) {
             return back()->with(
                 'error',
-                'Account “'.$account->name.'” creato, ma non è stato possibile importare i modelli: '
-                .$e->getMessage()
-                .' Potrai riprovare con “Sincronizza modelli”.'
+                __('messages.accounts.created_models_error', [
+                    'name' => $account->name,
+                    'error' => $e->getMessage(),
+                ]),
             );
         }
 
         if ($count === 0) {
             return back()->with(
                 'success',
-                'Account “'.$account->name.'” creato. Il provider non ha restituito modelli: potrai sincronizzarli manualmente.'
+                __('messages.accounts.created_without_models', ['name' => $account->name]),
             );
         }
 
         return back()->with(
             'success',
-            'Account “'.$account->name.'” creato: '
-            .($count === 1 ? '1 modello importato.' : $count.' modelli importati.')
+            trans_choice('messages.accounts.created_with_models', $count, [
+                'name' => $account->name,
+            ]),
         );
     }
 
@@ -70,9 +73,13 @@ class AiAccountController extends Controller
             unset($data['api_key']);
         }
 
+        if (array_key_exists('max_parallel_requests', $data) && $data['max_parallel_requests'] === null) {
+            unset($data['max_parallel_requests']);
+        }
+
         $account->update($data);
 
-        return back()->with('success', 'Account aggiornato.');
+        return back()->with('success', __('messages.accounts.updated'));
     }
 
     public function destroy(AiAccount $account): RedirectResponse
@@ -80,7 +87,7 @@ class AiAccountController extends Controller
         $name = $account->name;
         $account->delete();
 
-        return back()->with('success', 'Account eliminato: '.$name.'.');
+        return back()->with('success', __('messages.accounts.deleted', ['name' => $name]));
     }
 
     public function syncModels(AiAccount $account): RedirectResponse
@@ -93,9 +100,7 @@ class AiAccountController extends Controller
 
         return back()->with(
             'success',
-            $count === 1
-                ? '1 modello sincronizzato.'
-                : $count.' modelli sincronizzati.'
+            trans_choice('messages.accounts.models_synced', $count),
         );
     }
 
@@ -109,7 +114,7 @@ class AiAccountController extends Controller
 
         return back()->with(
             'success',
-            'Connessione riuscita: '.count($models).' modelli disponibili.'
+            __('messages.accounts.connection_ok', ['count' => count($models)]),
         );
     }
 
@@ -148,12 +153,7 @@ class AiAccountController extends Controller
             'default_model' => ['nullable', 'string', 'max:190'],
             'is_active' => ['nullable', 'boolean'],
             'request_mode' => ['nullable', 'string', 'in:serial,parallel'],
-        ], [
-            'name.required' => 'Il nome dell’account è obbligatorio.',
-            'base_url.required' => 'L’URL di base è obbligatorio.',
-            'base_url.url' => 'L’URL di base non è valido.',
-            'provider.in' => 'Provider non riconosciuto.',
-            'request_mode.in' => 'Modalità richieste non riconosciuta.',
+            'max_parallel_requests' => ['nullable', 'integer', 'min:1', 'max:50'],
         ]);
     }
 }

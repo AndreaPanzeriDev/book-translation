@@ -64,6 +64,46 @@ it('rifiuta una modalità richieste non valida', function () {
     expect(AiAccount::count())->toBe(0);
 });
 
+it('usa quattro richieste parallele come default', function () {
+    Http::fake();
+
+    $this->post('/accounts', accountPayload(['request_mode' => 'parallel']))->assertRedirect();
+
+    expect(AiAccount::firstOrFail()->max_parallel_requests)->toBe(4);
+});
+
+it('salva il limite di richieste parallele e lo espone al client', function () {
+    Http::fake();
+
+    $this->post('/accounts', accountPayload([
+        'request_mode' => 'parallel',
+        'max_parallel_requests' => 3,
+    ]))->assertRedirect();
+
+    $account = AiAccount::firstOrFail();
+
+    expect($account->max_parallel_requests)->toBe(3)
+        ->and($account->parallelLimit())->toBe(3);
+
+    $this->get('/accounts')
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('Accounts')
+            ->where('accounts.0.request_mode', 'parallel')
+            ->where('accounts.0.max_parallel_requests', 3));
+});
+
+it('rifiuta un limite di richieste parallele non valido', function ($limit) {
+    Http::fake();
+
+    $this->post('/accounts', accountPayload([
+        'request_mode' => 'parallel',
+        'max_parallel_requests' => $limit,
+    ]))->assertSessionHasErrors('max_parallel_requests');
+
+    expect(AiAccount::count())->toBe(0);
+})->with([0, 51, 'molte']);
+
 it('aggiorna la modalità richieste di un account', function () {
     Http::fake();
 
@@ -74,6 +114,19 @@ it('aggiorna la modalità richieste di un account', function () {
     ]))->assertRedirect();
 
     expect($account->refresh()->request_mode)->toBe('parallel');
+});
+
+it('aggiorna il limite di richieste parallele di un account', function () {
+    Http::fake();
+
+    $account = AiAccount::create(accountPayload(['request_mode' => 'parallel']));
+
+    $this->put("/accounts/{$account->id}", accountPayload([
+        'request_mode' => 'parallel',
+        'max_parallel_requests' => 2,
+    ]))->assertRedirect();
+
+    expect($account->refresh()->max_parallel_requests)->toBe(2);
 });
 
 it('importa automaticamente i modelli alla creazione dell’account', function () {
