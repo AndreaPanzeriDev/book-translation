@@ -2,15 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AiAccount;
 use App\Models\Book;
-use App\Models\Translation;
-use App\Services\Translation\TranslationPrompt;
+use App\Services\Export\BookExportBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class TranslationCoverageController extends Controller
 {
+    public function __construct(private readonly BookExportBuilder $builder) {}
+
     public function __invoke(Request $request, Book $book): JsonResponse
     {
         $data = $request->validate([
@@ -19,24 +21,15 @@ class TranslationCoverageController extends Controller
             'target_language' => ['required', 'string', 'max:16'],
         ]);
 
-        $coverage = Translation::query()
-            ->join('pages', 'pages.id', '=', 'translations.page_id')
-            ->where('pages.book_id', $book->id)
-            ->where('translations.ai_account_id', $data['account_id'])
-            ->where('translations.model', $data['model'])
-            ->where('translations.target_language', $data['target_language'])
-            ->where('translations.status', 'completed')
-            ->where('translations.prompt_version', TranslationPrompt::VERSION)
-            ->selectRaw('pages.chapter_id, COUNT(DISTINCT pages.id) AS translated')
-            ->groupBy('pages.chapter_id')
-            ->orderBy('pages.chapter_id')
-            ->get();
+        $account = AiAccount::query()->findOrFail($data['account_id']);
 
         return response()->json([
-            'coverage' => $coverage->map(fn (Translation $translation) => [
-                'chapter_id' => (int) $translation->chapter_id,
-                'translated' => (int) $translation->translated,
-            ])->values(),
+            'coverage' => $this->builder->coverage(
+                $book,
+                $account,
+                $data['model'],
+                $data['target_language'],
+            ),
         ]);
     }
 }

@@ -10,6 +10,7 @@ Lo stack è **Laravel 13 + Inertia 3 + React 19 + TypeScript + Tailwind CSS 4 + 
 - Pagine virtuali stabili da circa 1.500 caratteri, perché l'EPUB non ha pagine fisse.
 - Selezione di una pagina, di un intervallo con `Shift + clic`, di un intero capitolo o di tutto il libro.
 - Confronto originale + 1 traduzione oppure originale + 2 traduzioni (massimo tre colonne).
+- Esportazione dell'intero libro o dei capitoli scelti in EPUB 3 e PDF (A5 con indice e numeri di pagina) usando la traduzione visualizzata. Se nelle pagine selezionate mancano traduzioni, l'esportazione viene bloccata con l'elenco dei capitoli incompleti.
 - Ogni colonna di traduzione sceglie autonomamente account e modello.
 - Più account contemporanei: OpenAI, OpenRouter, Ollama locale o qualsiasi endpoint compatibile OpenAI.
 - Traduzione in batch eseguita sul server: un batch attivo per libro, libri diversi in parallelo, avanzamento persistente anche dopo refresh o chiusura del tab. Pannello globale con interruzione e riprova degli errori.
@@ -137,6 +138,7 @@ Verificare la connessione con **Account AI → Verifica**. Se compare un errore 
 6. Seguire l’avanzamento nel pannello globale in basso a destra: mostra libri in traduzione, richieste elaborate, riuscite, errori, richieste in corso e permette di interrompere o riprovare i fallimenti. Il pannello resta visibile su Account AI, Libreria e altri libri.
 7. Un libro può avere un solo batch attivo; libri diversi procedono contemporaneamente. Le traduzioni già ottenute vengono mostrate con il tag `cache` e non vengono richieste di nuovo.
 8. Selezionare una frase nell'originale: la traduzione corrispondente viene evidenziata automaticamente in ogni colonna visibile.
+9. Premere **Esporta** per scaricare il libro o i capitoli scelti in EPUB o PDF. Se è visibile una sola colonna di traduzione viene usata quella; con due colonne si sceglie quale esportare. L'esportazione richiede che tutte le pagine selezionate siano tradotte con account, modello, lingua e versione del prompt correnti e che ogni blocco abbia un testo tradotto non vuoto.
 
 L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione possono usare lo stesso account con modelli diversi oppure account diversi.
 
@@ -150,6 +152,7 @@ Il selettore **IT / EN** nell’intestazione cambia la lingua dell’interfaccia
 - **Batch** — il browser crea un batch tramite API e poi osserva solo lo stato salvato nel database. Il server crea `translation_batches` e `translation_batch_items`, esclude le pagine già in cache e accoda un job per pagina/slot. In serie un account esegue un item alla volta tramite lock e catena i successivi; in parallelo tutti gli item dell'account partono subito. Un batch attivo per libro è garantito da un lock sulla riga del libro; libri diversi procedono in parallelo.
 - **Cache** — la chiave è calcolata da pagina, hash del testo sorgente, account, modello, lingua di destinazione, versione del prompt e parametri. Una traduzione completata viene riusata; una fallita può essere ritentata.
 - **Allineamento** — il frontend divide blocchi originali e tradotti in frasi con `Intl.Segmenter`, mappa la selezione del browser alle frasi di origine e allinea le frasi tradotte per lunghezza e punteggiatura. Se il numero di frasi coincide, usa l'allineamento 1:1; altrimenti risolve casi 1:2, 2:1 e frasi mancanti.
+- **Esportazione** — `BookExportBuilder` verifica che tutte le pagine dei capitoli scelti abbiano una traduzione completata con account, modello, lingua di destinazione, versione del prompt e hash del testo correnti. `EpubExporter` genera un EPUB 3 pulito (copertina, indice e un documento per capitolo) dai soli blocchi tradotti; `PdfExporter` compone un PDF A5 con pagina del titolo, indice e numeri di pagina tramite mPDF. In caso di pagine mancanti la richiesta restituisce un errore 422 con il dettaglio dei capitoli incompleti.
 - **Provider** — `OpenAiCompatibleClient` usa l'endpoint `/chat/completions` e `/models` dell'API OpenAI. Funziona con OpenAI, OpenRouter, Ollama e server compatibili.
 - **Frontend** — Inertia collega le pagine React ai controller Laravel. Ant Design è configurato con `StyleProvider layer` e tema personalizzato; Tailwind gestisce il layout. Le pagine sono caricate in modo lazy da Vite.
 - **Lingua dell’interfaccia** — `SetLocale` applica il cookie `locale` oppure la lingua dichiarata dal browser, con fallback all’italiano. `i18next` e `react-i18next` traducono il frontend; `lang/{it,en}` contiene messaggi applicativi e validazioni. Ogni batch salva il proprio locale per localizzare anche gli errori generati dai job in background.
@@ -194,6 +197,7 @@ La suite Pest copre:
 - creazione e aggiornamento account, cifratura della chiave, modalità richieste, sincronizzazione modelli e cancellazione;
 - aggiornamento della lingua di destinazione del libro;
 - validazione dei capitoli appartenenti al libro;
+- esportazione EPUB e PDF, selezione della versione di traduzione, blocco sulle pagine mancanti e rifiuto di capitoli di altri libri;
 - rilevamento della lingua da cookie e browser, cambio lingua, cookie annuale e messaggi backend in inglese;
 - lingua salvata sul batch e uso della stessa lingua negli errori dei job.
 
@@ -201,7 +205,7 @@ La suite Pest copre:
 make test
 ```
 
-Stato attuale: **63 test, 295 asserzioni**.
+Stato attuale: **92 test, 444 asserzioni**.
 
 ## Privacy e sicurezza
 
@@ -230,6 +234,7 @@ app/
   Jobs/                   ProcessTranslationBatchItem
   Models/                 Book, Chapter, Page, Block, AiAccount, AiModel, Translation, TranslationBatch, TranslationBatchItem
   Services/Epub/          Parser EPUB e importatore
+  Services/Export/        Costruzione dati, generatori EPUB e PDF
   Services/Translation/   Servizio di traduzione, client OpenAI e orchestrazione batch
 resources/js/
   pages/                  Library, Accounts, Books/Show

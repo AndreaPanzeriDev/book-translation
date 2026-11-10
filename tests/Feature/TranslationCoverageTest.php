@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\AiAccount;
+use App\Models\Block;
 use App\Models\Book;
 use App\Models\Chapter;
 use App\Models\Page;
@@ -124,6 +125,48 @@ it('ignora le traduzioni di altri account, modelli o lingue', function () {
     makeCoverageTranslation($pages[0], $otherAccount);
     makeCoverageTranslation($pages[0], $account, ['model' => 'other-model']);
     makeCoverageTranslation($pages[0], $account, ['target_language' => 'fr']);
+
+    $this->getJson(route('books.translation-coverage', [
+        'book' => $book,
+        'account_id' => $account->id,
+        'model' => 'test-model',
+        'target_language' => 'it',
+    ]))
+        ->assertOk()
+        ->assertJson([
+            'coverage' => [
+                ['chapter_id' => $chapterOne->id, 'translated' => 1],
+            ],
+        ]);
+});
+
+it('non conta come tradotta una pagina con un blocco tradotto vuoto', function () {
+    [$book, $chapterOne, , $pages, $account] = makeCoverageFixture();
+
+    $firstBlock = Block::create([
+        'page_id' => $pages[0]->id,
+        'position' => 0,
+        'type' => 'p',
+        'text' => 'Primo blocco.',
+        'char_count' => 13,
+    ]);
+
+    $secondBlock = Block::create([
+        'page_id' => $pages[0]->id,
+        'position' => 1,
+        'type' => 'p',
+        'text' => 'Secondo blocco.',
+        'char_count' => 15,
+    ]);
+
+    makeCoverageTranslation($pages[0], $account, [
+        'translated_blocks' => [
+            ['block_id' => $firstBlock->id, 'text' => 'Primo blocco tradotto.'],
+            ['block_id' => $secondBlock->id, 'text' => ''],
+        ],
+    ]);
+
+    makeCoverageTranslation($pages[1], $account);
 
     $this->getJson(route('books.translation-coverage', [
         'book' => $book,

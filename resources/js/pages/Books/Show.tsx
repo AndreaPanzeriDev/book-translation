@@ -1,5 +1,6 @@
 import {
     ArrowLeftOutlined,
+    DownloadOutlined,
     LeftOutlined,
     OrderedListOutlined,
     RightOutlined,
@@ -13,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import BlockRenderer from '@/components/BlockRenderer';
+import ExportBookModal from '@/components/ExportBookModal';
 import { useTranslationBatch } from '@/contexts/TranslationBatchProvider';
 import AppLayout from '@/layouts/AppLayout';
 import { currentLocale } from '@/i18n';
@@ -254,6 +256,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     );
     const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
     const [startingBatch, setStartingBatch] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
 
     const translationBusy = batchActive || startingBatch;
 
@@ -298,6 +301,17 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     };
 
     const slotsReady = activeSlots.every(({ slot }) => slotIsReady(slot));
+    const hasExportSlot = activeSlots.some(({ slot }) => slotIsReady(slot));
+
+    const exportSlots = useMemo(
+        () => [
+            { key: 'a' as const, accountId: slotA.accountId, model: slotA.model },
+            ...(secondColumn
+                ? [{ key: 'b' as const, accountId: slotB.accountId, model: slotB.model }]
+                : []),
+        ],
+        [secondColumn, slotA, slotB],
+    );
 
     const requestModeSummary = useMemo(() => {
         const modes = new Set(
@@ -798,6 +812,13 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                         showSearch
                         optionFilterProp="label"
                     />
+                    <Button
+                        icon={<DownloadOutlined />}
+                        onClick={() => setExportOpen(true)}
+                        disabled={!hasExportSlot}
+                    >
+                        {t('export.button')}
+                    </Button>
                 </div>
             </div>
 
@@ -1201,6 +1222,16 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                     )}
                 </section>
             </div>
+
+            <ExportBookModal
+                open={exportOpen}
+                onClose={() => setExportOpen(false)}
+                book={book}
+                chapters={chapters}
+                accounts={accounts}
+                targetLanguage={targetLanguage}
+                slots={exportSlots}
+            />
         </AppLayout>
     );
 }

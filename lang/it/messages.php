@@ -64,4 +64,11 @@ return [
         'untitled_section' => 'Sezione :number',
     ],
 
+    'export' => [
+        'incomplete' => 'Non è possibile esportare: mancano ancora delle traduzioni nei capitoli selezionati.',
+        'failed' => 'Impossibile generare il file. Riprova.',
+        'toc' => 'Indice',
+        'translation_into' => 'Traduzione in :language',
+    ],
+
 ];
