@@ -191,6 +191,26 @@ it('blocca l’intero libro quando un capitolo selezionato non è completamente 
         ->assertJsonPath('missing_chapters.0.total', 3);
 });
 
+it('blocca l’esportazione quando un blocco tradotto è vuoto', function () {
+    $book = makeExportBookFixture();
+    $account = makeExportAccount();
+    $chapter = $book->chapters()->orderBy('position')->get()->last();
+
+    translateExportBook($book, $account, 'model-a');
+
+    $page = $chapter->pages()->orderBy('position')->firstOrFail();
+    $translation = Translation::query()->where('page_id', $page->id)->firstOrFail();
+    $blocks = $translation->translated_blocks;
+    $blocks[0]['text'] = '';
+    $translation->update(['translated_blocks' => $blocks]);
+
+    $this->postJson(route('books.export', $book), exportPayload($account, [$chapter->id]))
+        ->assertStatus(422)
+        ->assertJsonPath('missing_pages', 1)
+        ->assertJsonPath('missing_chapters.0.translated', 2)
+        ->assertJsonPath('missing_chapters.0.total', 3);
+});
+
 it('permette di esportare un singolo capitolo completamente tradotto', function () {
     $book = makeExportBookFixture();
     $account = makeExportAccount();

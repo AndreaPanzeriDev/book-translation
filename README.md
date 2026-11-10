@@ -138,7 +138,7 @@ Verificare la connessione con **Account AI → Verifica**. Se compare un errore 
 6. Seguire l’avanzamento nel pannello globale in basso a destra: mostra libri in traduzione, richieste elaborate, riuscite, errori, richieste in corso e permette di interrompere o riprovare i fallimenti. Il pannello resta visibile su Account AI, Libreria e altri libri.
 7. Un libro può avere un solo batch attivo; libri diversi procedono contemporaneamente. Le traduzioni già ottenute vengono mostrate con il tag `cache` e non vengono richieste di nuovo.
 8. Selezionare una frase nell'originale: la traduzione corrispondente viene evidenziata automaticamente in ogni colonna visibile.
-9. Premere **Esporta** per scaricare il libro o i capitoli scelti in EPUB o PDF. Se è visibile una sola colonna di traduzione viene usata quella; con due colonne si sceglie quale esportare. L'esportazione richiede che tutte le pagine selezionate siano tradotte con account, modello, lingua e versione del prompt correnti.
+9. Premere **Esporta** per scaricare il libro o i capitoli scelti in EPUB o PDF. Se è visibile una sola colonna di traduzione viene usata quella; con due colonne si sceglie quale esportare. L'esportazione richiede che tutte le pagine selezionate siano tradotte con account, modello, lingua e versione del prompt correnti e che ogni blocco abbia un testo tradotto non vuoto.
 
 L'originale resta sempre visibile nella prima colonna. Le colonne di traduzione possono usare lo stesso account con modelli diversi oppure account diversi.
 
@@ -205,7 +205,7 @@ La suite Pest copre:
 make test
 ```
 
-Stato attuale: **89 test, 435 asserzioni**.
+Stato attuale: **92 test, 444 asserzioni**.
 
 ## Privacy e sicurezza
 

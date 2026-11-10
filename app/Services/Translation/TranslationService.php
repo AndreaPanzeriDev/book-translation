@@ -238,7 +238,7 @@ class TranslationService
             $this->lastRawResponse = $response['content'];
             $text = $this->cleanSingleBlockTranslation($response['content']);
 
-            if ($text === '') {
+            if ($text === '' && trim($block->text) !== '') {
                 throw new TranslationException(
                     __('messages.translation.missing_segment'),
                     retryable: true,
@@ -296,7 +296,16 @@ class TranslationService
                 );
             }
 
-            $translated[] = ['block_id' => $block->id, 'text' => trim($text)];
+            $text = trim($text);
+
+            if ($text === '' && trim($block->text) !== '') {
+                throw new TranslationException(
+                    __('messages.translation.missing_segment'),
+                    retryable: true,
+                );
+            }
+
+            $translated[] = ['block_id' => $block->id, 'text' => $text];
         }
 
         return $translated;

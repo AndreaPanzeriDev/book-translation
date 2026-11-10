@@ -242,6 +242,41 @@ it('ritenta quando la risposta fonde i segmenti e completa al secondo tentativo'
     Http::assertSentCount(2);
 });
 
+it('ritenta quando un segmento tradotto è vuoto', function () {
+    [$book, $page, $account] = makeTranslationFixture();
+
+    Http::fakeSequence()
+        ->push([
+            'choices' => [
+                ['message' => ['content' => json_encode([
+                    'translations' => [
+                        ['id' => 1, 'text' => ''],
+                        ['id' => 2, 'text' => 'Secondo segmento.'],
+                    ],
+                ])]],
+            ],
+        ])
+        ->push([
+            'choices' => [
+                ['message' => ['content' => json_encode([
+                    'translations' => [
+                        ['id' => 1, 'text' => 'Primo segmento.'],
+                        ['id' => 2, 'text' => 'Secondo segmento.'],
+                    ],
+                ])]],
+            ],
+        ]);
+
+    $this->postJson(route('translations.store', $book), [
+        'page_id' => $page->id,
+        'account_id' => $account->id,
+        'model' => 'test-model',
+    ])->assertCreated()
+        ->assertJsonPath('translation.translated_blocks.0.text', 'Primo segmento.');
+
+    Http::assertSentCount(2);
+});
+
 it('ritenta quando gli id sono mancanti, duplicati o fuori intervallo', function () {
     [$book, $page, $account] = makeTranslationFixture();
 

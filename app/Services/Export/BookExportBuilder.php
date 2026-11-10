@@ -3,6 +3,7 @@
 namespace App\Services\Export;
 
 use App\Models\AiAccount;
+use App\Models\Block;
 use App\Models\Book;
 use App\Models\Chapter;
 use App\Models\Page;
@@ -70,7 +71,7 @@ class BookExportBuilder
                 foreach ($page->blocks as $block) {
                     $text = $translatedBlocks[$block->id] ?? null;
 
-                    if (! is_string($text)) {
+                    if (! $this->translatedTextIsValid($block, $text)) {
                         throw $this->incompleteException(
                             $chapters,
                             $pages,
@@ -104,6 +105,42 @@ class BookExportBuilder
             'cover_mime' => $coverMime,
             'chapters' => $chaptersData,
         ];
+    }
+
+    /**
+     * @return array<int, array{chapter_id: int, translated: int}>
+     */
+    public function coverage(
+        Book $book,
+        AiAccount $account,
+        string $model,
+        string $targetLanguage,
+    ): array {
+        $pages = Page::query()
+            ->where('book_id', $book->id)
+            ->with(['blocks' => fn ($query) => $query->select('id', 'page_id', 'position', 'text')])
+            ->orderBy('position')
+            ->get(['id', 'chapter_id', 'position', 'source_hash']);
+
+        $translations = $this->translationsFor($pages, $account, $model, $targetLanguage);
+        $missing = $this->missingPages($pages, $translations)->keyBy('id');
+
+        return $pages
+            ->groupBy('chapter_id')
+            ->map(function (Collection $chapterPages, int|string $chapterId) use ($missing): array {
+                $missingCount = $chapterPages
+                    ->filter(fn (Page $page) => $missing->has($page->id))
+                    ->count();
+
+                return [
+                    'chapter_id' => (int) $chapterId,
+                    'translated' => $chapterPages->count() - $missingCount,
+                ];
+            })
+            ->sortKeys()
+            ->filter(fn (array $row) => $row['translated'] > 0)
+            ->values()
+            ->all();
     }
 
     /**
@@ -153,13 +190,22 @@ class BookExportBuilder
             foreach ($page->blocks as $block) {
                 $text = $translatedBlocks[$block->id] ?? null;
 
-                if (! is_string($text) || trim($text) === '') {
+                if (! $this->translatedTextIsValid($block, $text)) {
                     return true;
                 }
             }
 
             return false;
         });
+    }
+
+    private function translatedTextIsValid(Block $block, ?string $text): bool
+    {
+        if (! is_string($text)) {
+            return false;
+        }
+
+        return trim($text) !== '' || trim($block->text) === '';
     }
 
     /**
