@@ -24,12 +24,14 @@ import type {
     AiAccount,
     BookSummary,
     ChapterSummary,
+    LastUsedTranslationModels,
     LastUsedTranslationSlot,
     LastUsedTranslationSlots,
     PageDetail,
     PageIndexItem,
     RequestMode,
     Translation,
+    TranslationCoverageResponse,
 } from '@/types';
 
 interface Props {
@@ -38,6 +40,7 @@ interface Props {
     pageIndex: PageIndexItem[];
     accounts: AiAccount[];
     lastUsedSlots: LastUsedTranslationSlots;
+    lastUsedModels: LastUsedTranslationModels;
 }
 
 type SlotKey = 'a' | 'b';
@@ -51,7 +54,22 @@ function defaultModelFor(account: AiAccount | undefined): string {
     return account?.default_model || account?.models[0]?.model_id || '';
 }
 
-function defaultSlot(accounts: AiAccount[], excludeAccountId?: number | null): Slot {
+function preferredModelFor(
+    account: AiAccount | undefined,
+    lastUsedModels: LastUsedTranslationModels,
+): string {
+    if (!account) {
+        return '';
+    }
+
+    return lastUsedModels[account.id] ?? defaultModelFor(account);
+}
+
+function defaultSlot(
+    accounts: AiAccount[],
+    lastUsedModels: LastUsedTranslationModels,
+    excludeAccountId?: number | null,
+): Slot {
     const active = accounts.filter((account) => account.is_active);
     const account = active.find((item) => item.id !== excludeAccountId) ?? active[0];
 
@@ -59,7 +77,7 @@ function defaultSlot(accounts: AiAccount[], excludeAccountId?: number | null): S
         return { accountId: null, model: '' };
     }
 
-    return { accountId: account.id, model: defaultModelFor(account) };
+    return { accountId: account.id, model: preferredModelFor(account, lastUsedModels) };
 }
 
 function slotFromHistory(
@@ -161,22 +179,25 @@ function SlotPicker({
     label,
     slot,
     accounts,
+    lastUsedModels,
     onChange,
 }: {
     label: string;
     slot: Slot;
     accounts: AiAccount[];
+    lastUsedModels: LastUsedTranslationModels;
     onChange: (slot: Slot) => void;
 }) {
     const { t } = useTranslation();
     const account = accounts.find((item) => item.id === slot.accountId);
+    const preferredModel = preferredModelFor(account, lastUsedModels);
     const modelOptions = (account?.models ?? []).map((model) => ({
         value: model.model_id,
         label: model.model_id,
     }));
 
-    if (account?.default_model && !modelOptions.some((option) => option.value === account.default_model)) {
-        modelOptions.unshift({ value: account.default_model, label: account.default_model });
+    if (preferredModel && !modelOptions.some((option) => option.value === preferredModel)) {
+        modelOptions.unshift({ value: preferredModel, label: preferredModel });
     }
 
     return (
@@ -204,7 +225,7 @@ function SlotPicker({
                     }))}
                     onChange={(accountId: number) => {
                         const selected = accounts.find((item) => item.id === accountId);
-                        onChange({ accountId, model: defaultModelFor(selected) });
+                        onChange({ accountId, model: preferredModelFor(selected, lastUsedModels) });
                     }}
                 />
                 <AutoComplete
@@ -228,7 +249,7 @@ function SlotPicker({
     );
 }
 
-export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlots }: Props) {
+export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlots, lastUsedModels }: Props) {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const { startBatch, batchesByBook } = useTranslationBatch();
@@ -244,15 +265,20 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     const [pages, setPages] = useState<Record<number, PageDetail>>({});
     const [translationCache, setTranslationCache] = useState<Record<number, Translation[]>>({});
     const [chapterCoverage, setChapterCoverage] = useState<Record<number, number>>({});
+    const [missingPagesBySlot, setMissingPagesBySlot] = useState<
+        Partial<Record<SlotKey, Set<number>>>
+    >({});
+    const [coverageReady, setCoverageReady] = useState(false);
+    const [coverageLoading, setCoverageLoading] = useState(false);
     const [loadingPages, setLoadingPages] = useState(false);
     const [secondColumn, setSecondColumn] = useState(false);
     const [slotA, setSlotA] = useState<Slot>(
-        () => slotFromHistory(lastUsedSlots.a, accounts) ?? defaultSlot(accounts),
+        () => slotFromHistory(lastUsedSlots.a, accounts) ?? defaultSlot(accounts, lastUsedModels),
     );
     const [slotB, setSlotB] = useState<Slot>(
         () =>
             slotFromHistory(lastUsedSlots.b, accounts) ??
-            defaultSlot(accounts, slotA.accountId),
+            defaultSlot(accounts, lastUsedModels, slotA.accountId),
     );
     const [sourceSelection, setSourceSelection] = useState<SourceSelection | null>(null);
     const [startingBatch, setStartingBatch] = useState(false);
@@ -262,6 +288,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
 
     const selectionSignatureRef = useRef<string | null>(null);
     const completedCountRef = useRef(bookBatch?.succeeded ?? 0);
+    const coverageSignatureRef = useRef<string | null>(null);
 
     const activeAccounts = useMemo(() => accounts.filter((account) => account.is_active), [accounts]);
     const chapterPages = useMemo(
@@ -271,10 +298,6 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     const selectedPages = useMemo(
         () => pageIndex.filter((page) => selected.has(page.id)),
         [pageIndex, selected],
-    );
-    const selectedChars = useMemo(
-        () => selectedPages.reduce((total, page) => total + page.char_count, 0),
-        [selectedPages],
     );
     const chapterFullySelected =
         chapterPages.length > 0 && chapterPages.every((page) => selected.has(page.id));
@@ -302,6 +325,33 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
 
     const slotsReady = activeSlots.every(({ slot }) => slotIsReady(slot));
     const hasExportSlot = activeSlots.some(({ slot }) => slotIsReady(slot));
+
+    const coverageSignature = useMemo(
+        () =>
+            `${activeSlots
+                .map(({ key, slot }) => `${key}:${slot.accountId ?? ''}:${slot.model.trim()}`)
+                .join('|')}|${targetLanguage}`,
+        [activeSlots, targetLanguage],
+    );
+
+    const pagesToTranslate = useMemo(() => {
+        if (!coverageReady) {
+            return selectedPages;
+        }
+
+        return selectedPages.filter((page) =>
+            activeSlots.some(({ key }) => missingPagesBySlot[key]?.has(page.id) ?? false),
+        );
+    }, [activeSlots, coverageReady, missingPagesBySlot, selectedPages]);
+
+    const charsToTranslate = useMemo(
+        () => pagesToTranslate.reduce((total, page) => total + page.char_count, 0),
+        [pagesToTranslate],
+    );
+    const showRemaining = coverageReady && selected.size > 0;
+    const coveragePending =
+        slotsReady && selected.size > 0 && coverageLoading && !coverageReady;
+    const selectionAlreadyTranslated = showRemaining && pagesToTranslate.length === 0;
 
     const exportSlots = useMemo(
         () => [
@@ -415,41 +465,82 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     const completedCount = bookBatch?.succeeded ?? 0;
 
     useEffect(() => {
-        const account = accounts.find((item) => item.id === slotA.accountId);
+        const readySlots = activeSlots.filter(({ slot }) => slotIsReady(slot));
 
-        if (!slotA.accountId || slotA.model.trim() === '' || !account || !account.is_active) {
+        if (readySlots.length === 0) {
+            coverageSignatureRef.current = null;
             setChapterCoverage({});
+            setMissingPagesBySlot({});
+            setCoverageReady(false);
+            setCoverageLoading(false);
 
             return;
         }
 
+        if (coverageSignatureRef.current !== coverageSignature) {
+            coverageSignatureRef.current = coverageSignature;
+            setChapterCoverage({});
+            setMissingPagesBySlot({});
+            setCoverageReady(false);
+            setCoverageLoading(true);
+        }
+
         const controller = new AbortController();
         const timer = window.setTimeout(() => {
-            axios
-                .get<{ coverage: { chapter_id: number; translated: number }[] }>(
-                    `/books/${book.id}/translation-coverage`,
-                    {
-                        params: {
-                            account_id: slotA.accountId,
-                            model: slotA.model,
-                            target_language: targetLanguage,
-                        },
-                        signal: controller.signal,
-                    },
-                )
-                .then(({ data }) => {
-                    const next: Record<number, number> = {};
+            setCoverageLoading(true);
 
-                    for (const row of data.coverage) {
-                        next[row.chapter_id] = row.translated;
+            Promise.all(
+                readySlots.map(async ({ key, slot }) => {
+                    const { data } = await axios.get<TranslationCoverageResponse>(
+                        `/books/${book.id}/translation-coverage`,
+                        {
+                            params: {
+                                account_id: slot.accountId,
+                                model: slot.model.trim(),
+                                target_language: targetLanguage,
+                            },
+                            signal: controller.signal,
+                        },
+                    );
+
+                    return { key, data };
+                }),
+            )
+                .then((results) => {
+                    if (controller.signal.aborted) {
+                        return;
                     }
 
-                    setChapterCoverage(next);
+                    const nextMissing: Partial<Record<SlotKey, Set<number>>> = {};
+
+                    for (const { key, data } of results) {
+                        nextMissing[key] = new Set(data.missing_page_ids);
+                    }
+
+                    setMissingPagesBySlot(nextMissing);
+
+                    const slotACoverage = results.find(({ key }) => key === 'a')?.data.coverage;
+
+                    if (slotACoverage) {
+                        const next: Record<number, number> = {};
+
+                        for (const row of slotACoverage) {
+                            next[row.chapter_id] = row.translated;
+                        }
+
+                        setChapterCoverage(next);
+                    } else {
+                        setChapterCoverage({});
+                    }
+
+                    setCoverageReady(readySlots.length === activeSlots.length);
+                    setCoverageLoading(false);
                 })
                 .catch((error) => {
                     if (!axios.isCancel(error)) {
-                        // La copertura è indicativa: i tag cache delle pagine
-                        // restano la fonte principale per il capitolo aperto.
+                        setCoverageLoading(false);
+                        // La copertura è indicativa: in caso di errore la card
+                        // torna a mostrare il totale selezionato.
                     }
                 });
         }, 200);
@@ -458,7 +549,14 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
             window.clearTimeout(timer);
             controller.abort();
         };
-    }, [accounts, book.id, completedCount, slotA.accountId, slotA.model, targetLanguage]);
+    }, [
+        accounts,
+        activeSlots,
+        book.id,
+        completedCount,
+        coverageSignature,
+        targetLanguage,
+    ]);
 
     useEffect(() => {
         if (completedCount <= completedCountRef.current) {
@@ -732,7 +830,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     };
 
     const startTranslation = () => {
-        void launchBatch(Array.from(selected));
+        void launchBatch(pagesToTranslate.map((page) => page.id));
     };
 
     const translatePage = (pageId: number) => {
@@ -755,7 +853,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
         setSecondColumn(checked);
 
         if (checked && (!slotB.accountId || !slotB.model)) {
-            setSlotB(defaultSlot(accounts, slotA.accountId));
+            setSlotB(defaultSlot(accounts, lastUsedModels, slotA.accountId));
         }
     };
 
@@ -915,17 +1013,37 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
 
                     <div className="rounded-xl border border-parchment-200 bg-white p-4 shadow-sm">
                         <div className="flex items-end justify-between">
-                            <span className="text-3xl font-semibold text-ink-900">{selected.size}</span>
-                            <span className="pb-1 text-xs text-ink-500">
-                                {t('studio.selectedPages', { count: selected.size })}
+                            <span className="text-3xl font-semibold text-ink-900">
+                                {coveragePending
+                                    ? '—'
+                                    : showRemaining
+                                      ? pagesToTranslate.length
+                                      : selected.size}
+                            </span>
+                            <span className="flex items-center gap-1.5 pb-1 text-xs text-ink-500">
+                                {coverageLoading && selected.size > 0 && <Spin size="small" />}
+                                {coveragePending
+                                    ? t('studio.calculatingSelection')
+                                    : showRemaining
+                                      ? t('studio.pagesToTranslate', {
+                                            count: pagesToTranslate.length,
+                                        })
+                                      : t('studio.selectedPages', { count: selected.size })}
                             </span>
                         </div>
-                        <p className="mt-0.5 text-xs text-ink-500">
-                            {t('studio.charsToTranslate', {
-                                count: selectedChars,
-                                value: selectedChars.toLocaleString(currentLocale()),
-                            })}
-                        </p>
+                        {!coveragePending && (
+                            <p className="mt-0.5 text-xs text-ink-500">
+                                {t('studio.charsToTranslate', {
+                                    count: charsToTranslate,
+                                    value: charsToTranslate.toLocaleString(currentLocale()),
+                                })}
+                            </p>
+                        )}
+                        {selectionAlreadyTranslated && (
+                            <p className="mt-1 text-[11px] leading-snug text-ink-500">
+                                {t('studio.selectionAlreadyTranslated')}
+                            </p>
+                        )}
 
                         <Button
                             type="primary"
@@ -934,7 +1052,12 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                             className="mt-3"
                             icon={<TranslationOutlined />}
                             onClick={startTranslation}
-                            disabled={selected.size === 0 || !slotsReady || translationBusy}
+                            disabled={
+                                selected.size === 0 ||
+                                !slotsReady ||
+                                translationBusy ||
+                                selectionAlreadyTranslated
+                            }
                             loading={translationBusy}
                         >
                             {translationBusy ? t('studio.translating') : t('studio.translateSelection')}
@@ -990,6 +1113,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                 label={t('studio.slot1')}
                                 slot={slotA}
                                 accounts={accounts}
+                                lastUsedModels={lastUsedModels}
                                 onChange={(slot) => updateSlot('a', slot)}
                             />
                             {secondColumn && (
@@ -997,6 +1121,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                     label={t('studio.slot2')}
                                     slot={slotB}
                                     accounts={accounts}
+                                    lastUsedModels={lastUsedModels}
                                     onChange={(slot) => updateSlot('b', slot)}
                                 />
                             )}

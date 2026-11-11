@@ -42,6 +42,14 @@ export interface PageIndexItem {
     char_count: number;
 }
 
+export interface TranslationCoverageResponse {
+    coverage: {
+        chapter_id: number;
+        translated: number;
+    }[];
+    missing_page_ids: number[];
+}
+
 export interface AiModel {
     id: number;
     model_id: string;
@@ -125,6 +133,8 @@ export interface LastUsedTranslationSlots {
     a: LastUsedTranslationSlot | null;
     b: LastUsedTranslationSlot | null;
 }
+
+export type LastUsedTranslationModels = Record<number, string>;
 
 export interface TranslationBatchFailure {
     item_id: number;

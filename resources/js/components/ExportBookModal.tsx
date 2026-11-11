@@ -4,7 +4,12 @@ import axios from 'axios';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import type { AiAccount, BookSummary, ChapterSummary } from '@/types';
+import type {
+    AiAccount,
+    BookSummary,
+    ChapterSummary,
+    TranslationCoverageResponse,
+} from '@/types';
 
 export interface ExportSlot {
     key: 'a' | 'b';
@@ -159,7 +164,7 @@ export default function ExportBookModal({
         setCoverageReady(false);
 
         axios
-            .get<{ coverage: { chapter_id: number; translated: number }[] }>(
+            .get<TranslationCoverageResponse>(
                 `/books/${book.id}/translation-coverage`,
                 {
                     params: {

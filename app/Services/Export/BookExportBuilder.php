@@ -108,7 +108,10 @@ class BookExportBuilder
     }
 
     /**
-     * @return array<int, array{chapter_id: int, translated: int}>
+     * @return array{
+     *     coverage: array<int, array{chapter_id: int, translated: int}>,
+     *     missing_page_ids: array<int, int>
+     * }
      */
     public function coverage(
         Book $book,
@@ -125,22 +128,29 @@ class BookExportBuilder
         $translations = $this->translationsFor($pages, $account, $model, $targetLanguage);
         $missing = $this->missingPages($pages, $translations)->keyBy('id');
 
-        return $pages
-            ->groupBy('chapter_id')
-            ->map(function (Collection $chapterPages, int|string $chapterId) use ($missing): array {
-                $missingCount = $chapterPages
-                    ->filter(fn (Page $page) => $missing->has($page->id))
-                    ->count();
+        return [
+            'coverage' => $pages
+                ->groupBy('chapter_id')
+                ->map(function (Collection $chapterPages, int|string $chapterId) use ($missing): array {
+                    $missingCount = $chapterPages
+                        ->filter(fn (Page $page) => $missing->has($page->id))
+                        ->count();
 
-                return [
-                    'chapter_id' => (int) $chapterId,
-                    'translated' => $chapterPages->count() - $missingCount,
-                ];
-            })
-            ->sortKeys()
-            ->filter(fn (array $row) => $row['translated'] > 0)
-            ->values()
-            ->all();
+                    return [
+                        'chapter_id' => (int) $chapterId,
+                        'translated' => $chapterPages->count() - $missingCount,
+                    ];
+                })
+                ->sortKeys()
+                ->filter(fn (array $row) => $row['translated'] > 0)
+                ->values()
+                ->all(),
+            'missing_page_ids' => $missing
+                ->keys()
+                ->map(fn (int|string $pageId) => (int) $pageId)
+                ->values()
+                ->all(),
+        ];
     }
 
     /**

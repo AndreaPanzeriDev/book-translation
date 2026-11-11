@@ -23,13 +23,16 @@ class TranslationCoverageController extends Controller
 
         $account = AiAccount::query()->findOrFail($data['account_id']);
 
+        $coverage = $this->builder->coverage(
+            $book,
+            $account,
+            $data['model'],
+            $data['target_language'],
+        );
+
         return response()->json([
-            'coverage' => $this->builder->coverage(
-                $book,
-                $account,
-                $data['model'],
-                $data['target_language'],
-            ),
+            'coverage' => $coverage['coverage'],
+            'missing_page_ids' => $coverage['missing_page_ids'],
         ]);
     }
 }

@@ -99,6 +99,7 @@ class BookController extends Controller
             'pageIndex' => $pages,
             'accounts' => $accounts,
             'lastUsedSlots' => $book->lastUsedSlots(),
+            'lastUsedModels' => (object) $book->lastUsedModelsByAccount(),
         ]);
     }
 

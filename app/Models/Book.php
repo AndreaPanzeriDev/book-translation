@@ -89,6 +89,48 @@ class Book extends Model
     }
 
     /**
+     * Recupera l'ultimo modello usato per ogni account sul libro.
+     *
+     * @return array<int, string>
+     */
+    public function lastUsedModelsByAccount(): array
+    {
+        $latestItemIds = TranslationBatchItem::query()
+            ->selectRaw('MAX(id) as latest_id')
+            ->whereIn('translation_batch_id', $this->translationBatches()->select('id'))
+            ->whereNotNull('ai_account_id')
+            ->groupBy('ai_account_id')
+            ->get()
+            ->pluck('latest_id');
+
+        $models = TranslationBatchItem::query()
+            ->whereIn('id', $latestItemIds)
+            ->get(['ai_account_id', 'model'])
+            ->mapWithKeys(fn (TranslationBatchItem $item) => [
+                (int) $item->ai_account_id => $item->model,
+            ])
+            ->all();
+
+        $latestTranslationIds = Translation::query()
+            ->selectRaw('MAX(id) as latest_id')
+            ->whereHas('page', fn ($query) => $query->where('book_id', $this->id))
+            ->whereNotNull('ai_account_id')
+            ->groupBy('ai_account_id')
+            ->get()
+            ->pluck('latest_id');
+
+        $legacyModels = Translation::query()
+            ->whereIn('id', $latestTranslationIds)
+            ->get(['ai_account_id', 'model'])
+            ->mapWithKeys(fn (Translation $translation) => [
+                (int) $translation->ai_account_id => $translation->model,
+            ])
+            ->all();
+
+        return $models + $legacyModels;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function toClientArray(): array

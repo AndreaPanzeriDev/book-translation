@@ -105,6 +105,7 @@ it('calcola la copertura per capitolo usando solo le traduzioni correnti e compl
                 ['chapter_id' => $chapterOne->id, 'translated' => 2],
                 ['chapter_id' => $chapterTwo->id, 'translated' => 1],
             ],
+            'missing_page_ids' => [$pages[3]->id],
         ]);
 });
 
@@ -137,6 +138,7 @@ it('ignora le traduzioni di altri account, modelli o lingue', function () {
             'coverage' => [
                 ['chapter_id' => $chapterOne->id, 'translated' => 1],
             ],
+            'missing_page_ids' => [$pages[1]->id, $pages[2]->id, $pages[3]->id],
         ]);
 });
 
@@ -179,6 +181,30 @@ it('non conta come tradotta una pagina con un blocco tradotto vuoto', function (
             'coverage' => [
                 ['chapter_id' => $chapterOne->id, 'translated' => 1],
             ],
+            'missing_page_ids' => [$pages[0]->id],
+        ]);
+});
+
+it('non segnala pagine mancanti quando tutte le pagine sono tradotte', function () {
+    [$book, $chapterOne, $chapterTwo, $pages, $account] = makeCoverageFixture();
+
+    foreach ($pages as $page) {
+        makeCoverageTranslation($page, $account);
+    }
+
+    $this->getJson(route('books.translation-coverage', [
+        'book' => $book,
+        'account_id' => $account->id,
+        'model' => 'test-model',
+        'target_language' => 'it',
+    ]))
+        ->assertOk()
+        ->assertJson([
+            'coverage' => [
+                ['chapter_id' => $chapterOne->id, 'translated' => 2],
+                ['chapter_id' => $chapterTwo->id, 'translated' => 2],
+            ],
+            'missing_page_ids' => [],
         ]);
 });
 

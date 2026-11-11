@@ -220,7 +220,9 @@ it('ripristina gli ultimi account e modelli usati per il libro', function () {
             ->where('lastUsedSlots.a.account_id', $accountA->id)
             ->where('lastUsedSlots.a.model', 'model-a-new')
             ->where('lastUsedSlots.b.account_id', $accountB->id)
-            ->where('lastUsedSlots.b.model', 'model-b-old'));
+            ->where('lastUsedSlots.b.model', 'model-b-old')
+            ->where("lastUsedModels.{$accountA->id}", 'model-a-new')
+            ->where("lastUsedModels.{$accountB->id}", 'model-b-old'));
 });
 
 it('usa l ultima traduzione come fallback quando non ci sono batch', function () {
@@ -244,5 +246,6 @@ it('usa l ultima traduzione come fallback quando non ci sono batch', function ()
             ->component('Books/Show')
             ->where('lastUsedSlots.a.account_id', $accountA->id)
             ->where('lastUsedSlots.a.model', 'legacy-model')
-            ->where('lastUsedSlots.b', null));
+            ->where('lastUsedSlots.b', null)
+            ->where("lastUsedModels.{$accountA->id}", 'legacy-model'));
 });
