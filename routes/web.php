@@ -3,6 +3,7 @@
 use App\Http\Controllers\AiAccountController;
 use App\Http\Controllers\BookController;
 use App\Http\Controllers\BookExportController;
+use App\Http\Controllers\BookReaderController;
 use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\TranslationBatchController;
@@ -18,6 +19,9 @@ Route::get('/books/{book}', [BookController::class, 'show'])->name('books.show')
 Route::patch('/books/{book}', [BookController::class, 'update'])->name('books.update');
 Route::delete('/books/{book}', [BookController::class, 'destroy'])->name('books.destroy');
 Route::get('/books/{book}/pages', [PageController::class, 'index'])->name('books.pages');
+Route::get('/books/{book}/reader', [BookReaderController::class, 'show'])->name('books.reader');
+Route::get('/books/{book}/reader/index', [BookReaderController::class, 'index'])->name('books.reader.index');
+Route::get('/books/{book}/reader/pages', [BookReaderController::class, 'pages'])->name('books.reader.pages');
 Route::get('/books/{book}/translation-coverage', TranslationCoverageController::class)->name('books.translation-coverage');
 Route::post('/books/{book}/export', BookExportController::class)->name('books.export');
 Route::post('/books/{book}/translations', [TranslationController::class, 'store'])->name('translations.store');

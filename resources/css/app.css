@@ -119,6 +119,72 @@ body {
     font-style: italic;
 }
 
+.reader-page {
+    font-family: var(--font-reading);
+    color: var(--color-ink-900);
+    font-size: 1.05rem;
+    line-height: 1.8;
+    animation: reader-page-in 220ms ease-out both;
+}
+
+.reader-page .reading-pane {
+    font-size: inherit;
+    line-height: inherit;
+}
+
+.reader-page .reading-pane p {
+    text-align: justify;
+    hyphens: auto;
+}
+
+.reader-page .reading-pane p + p {
+    text-indent: 1.35em;
+}
+
+.reader-page .reading-pane h1,
+.reader-page .reading-pane h2,
+.reader-page .reading-pane h3,
+.reader-page .reading-pane h4,
+.reader-page .reading-pane h5,
+.reader-page .reading-pane h6 {
+    text-align: left;
+    hyphens: none;
+}
+
+.reader-page .reading-pane blockquote,
+.reader-page .reading-pane li,
+.reader-page .reading-pane pre {
+    text-align: left;
+    hyphens: none;
+}
+
+.reader-page--spread {
+    font-size: 0.98rem;
+    line-height: 1.72;
+}
+
+.reader-spread .reader-page {
+    max-width: 38rem;
+}
+
+@keyframes reader-page-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reader-page {
+        animation: none;
+    }
+}
+
 * {
     scrollbar-width: thin;
     scrollbar-color: #cfc3b4 transparent;

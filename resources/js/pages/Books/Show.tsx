@@ -3,6 +3,7 @@ import {
     DownloadOutlined,
     LeftOutlined,
     OrderedListOutlined,
+    ReadOutlined,
     RightOutlined,
     ThunderboltOutlined,
     TranslationOutlined,
@@ -106,6 +107,23 @@ function mapTranslatedBlocks(page: PageDetail, translation: Translation) {
         type: block.type,
         text: byId.get(block.id) ?? translated[index]?.text ?? '',
     }));
+}
+
+function readerUrl(
+    bookId: number,
+    params: Record<string, string | number | undefined>,
+): string {
+    const search = new URLSearchParams();
+
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== '') {
+            search.set(key, String(value));
+        }
+    }
+
+    const query = search.toString();
+
+    return `/books/${bookId}/reader${query ? `?${query}` : ''}`;
 }
 
 interface SourceSelection {
@@ -362,6 +380,14 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
         ],
         [secondColumn, slotA, slotB],
     );
+
+    const readerHref = readerUrl(book.id, {
+        account_id: slotA.accountId ?? undefined,
+        model: slotA.model.trim() || undefined,
+        target_language: targetLanguage,
+        chapter: activeChapterId ?? undefined,
+        scope: 'chapter',
+    });
 
     const requestModeSummary = useMemo(() => {
         const modes = new Set(
@@ -911,6 +937,13 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                         optionFilterProp="label"
                     />
                     <Button
+                        icon={<ReadOutlined />}
+                        onClick={() => router.visit(readerHref)}
+                        aria-label={t('reader.readBookAria')}
+                    >
+                        {t('reader.readBook')}
+                    </Button>
+                    <Button
                         icon={<DownloadOutlined />}
                         onClick={() => setExportOpen(true)}
                         disabled={!hasExportSlot}
@@ -1142,6 +1175,24 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                         <div className="space-y-5">
                             {chapterPages.map((info, index) => {
                                 const page = pages[info.id];
+                                const readableTranslation = activeSlots
+                                    .map(({ slot }) => findTranslation(info.id, slot))
+                                    .find(
+                                        (translation): translation is Translation =>
+                                            translation !== undefined,
+                                    );
+                                const pageReaderHref = readableTranslation
+                                    ? readerUrl(book.id, {
+                                          account_id:
+                                              readableTranslation.ai_account_id ?? undefined,
+                                          model: readableTranslation.model,
+                                          target_language:
+                                              readableTranslation.target_language,
+                                          page: info.id,
+                                          chapter: info.chapter_id,
+                                          scope: 'page',
+                                      })
+                                    : null;
 
                                 return (
                                     <article
@@ -1189,6 +1240,23 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                     (bookBatch?.active_page_ids.includes(info.id) ?? false) && (
                                                         <Spin size="small" />
                                                     )}
+                                                {pageReaderHref && (
+                                                    <Tooltip
+                                                        title={t('reader.readAria', {
+                                                            position: info.position,
+                                                        })}
+                                                    >
+                                                        <Button
+                                                            size="small"
+                                                            icon={<ReadOutlined />}
+                                                            onClick={() =>
+                                                                router.visit(pageReaderHref)
+                                                            }
+                                                        >
+                                                            {t('reader.read')}
+                                                        </Button>
+                                                    </Tooltip>
+                                                )}
                                                 <Button
                                                     size="small"
                                                     icon={<ThunderboltOutlined />}

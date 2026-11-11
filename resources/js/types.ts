@@ -50,6 +50,51 @@ export interface TranslationCoverageResponse {
     missing_page_ids: number[];
 }
 
+export interface ReaderVersion {
+    account_id: number;
+    account_name: string;
+    account_active: boolean;
+    model: string;
+    target_language: string;
+    pages_count: number;
+}
+
+export interface ReaderPageIndexItem {
+    id: number;
+    position: number;
+    chapter_id: number;
+    chapter_position: number;
+}
+
+export interface ReaderChapterIndex {
+    chapter_id: number;
+    translated: number;
+}
+
+export interface ReaderIndex {
+    pages: ReaderPageIndexItem[];
+    chapters: ReaderChapterIndex[];
+    translated_pages: number;
+}
+
+export interface ReaderPageBlock {
+    id: number;
+    type: string;
+    text: string;
+}
+
+export interface ReaderPageContent {
+    id: number;
+    position: number;
+    chapter_id: number;
+    chapter_position: number;
+    blocks: ReaderPageBlock[];
+}
+
+export type ReaderScope = 'page' | 'chapter' | 'book';
+
+export type ReaderLayout = 'single' | 'spread';
+
 export interface AiModel {
     id: number;
     model_id: string;

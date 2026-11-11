@@ -3,17 +3,17 @@
 namespace App\Services\Export;
 
 use App\Models\AiAccount;
-use App\Models\Block;
 use App\Models\Book;
 use App\Models\Chapter;
 use App\Models\Page;
-use App\Models\Translation;
-use App\Services\Translation\TranslationPrompt;
+use App\Services\Translation\TranslatedContent;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
 class BookExportBuilder
 {
+    public function __construct(private readonly TranslatedContent $content) {}
+
     /**
      * @param  array<int, int>  $chapterIds
      * @return array{
@@ -51,8 +51,8 @@ class BookExportBuilder
             ->orderBy('position')
             ->get();
 
-        $translations = $this->translationsFor($pages, $account, $model, $targetLanguage);
-        $missingPages = $this->missingPages($pages, $translations);
+        $translations = $this->content->translationsFor($pages, $account, $model, $targetLanguage);
+        $missingPages = $this->content->missingPages($pages, $translations);
 
         if ($missingPages->isNotEmpty()) {
             throw $this->incompleteException($chapters, $pages, $missingPages);
@@ -66,12 +66,12 @@ class BookExportBuilder
             $blocks = [];
 
             foreach ($chapterPages as $page) {
-                $translatedBlocks = $this->translatedBlocksById($translations->get($page->id));
+                $translatedBlocks = $this->content->blocksById($translations->get($page->id));
 
                 foreach ($page->blocks as $block) {
                     $text = $translatedBlocks[$block->id] ?? null;
 
-                    if (! $this->translatedTextIsValid($block, $text)) {
+                    if (! $this->content->isTextValid($block, $text)) {
                         throw $this->incompleteException(
                             $chapters,
                             $pages,
@@ -125,8 +125,8 @@ class BookExportBuilder
             ->orderBy('position')
             ->get(['id', 'chapter_id', 'position', 'source_hash']);
 
-        $translations = $this->translationsFor($pages, $account, $model, $targetLanguage);
-        $missing = $this->missingPages($pages, $translations)->keyBy('id');
+        $translations = $this->content->translationsFor($pages, $account, $model, $targetLanguage);
+        $missing = $this->content->missingPages($pages, $translations)->keyBy('id');
 
         return [
             'coverage' => $pages
@@ -151,89 +151,6 @@ class BookExportBuilder
                 ->values()
                 ->all(),
         ];
-    }
-
-    /**
-     * @param  Collection<int, Page>  $pages
-     * @return Collection<int, Translation>
-     */
-    private function translationsFor(
-        Collection $pages,
-        AiAccount $account,
-        string $model,
-        string $targetLanguage,
-    ): Collection {
-        $pageById = $pages->keyBy('id');
-
-        return Translation::query()
-            ->whereIn('page_id', $pages->pluck('id'))
-            ->where('status', 'completed')
-            ->where('prompt_version', TranslationPrompt::VERSION)
-            ->where('target_language', $targetLanguage)
-            ->where('ai_account_id', $account->id)
-            ->where('model', $model)
-            ->orderBy('id')
-            ->get(['id', 'page_id', 'source_hash', 'translated_blocks'])
-            ->keyBy('page_id')
-            ->filter(
-                fn (Translation $translation) => isset($pageById[$translation->page_id])
-                    && $pageById[$translation->page_id]->source_hash === $translation->source_hash,
-            );
-    }
-
-    /**
-     * @param  Collection<int, Page>  $pages
-     * @param  Collection<int, Translation>  $translations
-     * @return Collection<int, Page>
-     */
-    private function missingPages(Collection $pages, Collection $translations): Collection
-    {
-        return $pages->filter(function (Page $page) use ($translations) {
-            $translation = $translations->get($page->id);
-
-            if (! $translation) {
-                return true;
-            }
-
-            $translatedBlocks = $this->translatedBlocksById($translation);
-
-            foreach ($page->blocks as $block) {
-                $text = $translatedBlocks[$block->id] ?? null;
-
-                if (! $this->translatedTextIsValid($block, $text)) {
-                    return true;
-                }
-            }
-
-            return false;
-        });
-    }
-
-    private function translatedTextIsValid(Block $block, ?string $text): bool
-    {
-        if (! is_string($text)) {
-            return false;
-        }
-
-        return trim($text) !== '' || trim($block->text) === '';
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    private function translatedBlocksById(?Translation $translation): array
-    {
-        $blocks = [];
-
-        foreach ($translation?->translated_blocks ?? [] as $item) {
-            if (! is_array($item) || ! isset($item['block_id'], $item['text']) || ! is_string($item['text'])) {
-                continue;
-            }
-
-            $blocks[(int) $item['block_id']] = $item['text'];
-        }
-
-        return $blocks;
     }
 
     /**
