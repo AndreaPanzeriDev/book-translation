@@ -9,10 +9,10 @@ import {
 import { router } from '@inertiajs/react';
 import { Alert, Button, Drawer, Empty, Segmented, Select, Spin, Tooltip } from 'antd';
 import axios from 'axios';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import ReaderPageView from '@/components/ReaderPageView';
+import ReaderCanvas from '@/components/ReaderCanvas';
 import ReaderSidebar from '@/components/ReaderSidebar';
 import { languageLabel } from '@/lib/languages';
 import {
@@ -21,6 +21,7 @@ import {
     scopePages,
     versionKey,
 } from '@/lib/reader';
+import { subscribeReaderKeyboard } from '@/lib/readerKeyboard';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import type {
     BookSummary,
@@ -34,6 +35,7 @@ import type {
 } from '@/types';
 
 const LAYOUT_KEY = 'reader:layout';
+const SIDEBAR_KEY = 'reader:sidebar';
 
 interface ReaderProps {
     book: BookSummary;
@@ -53,6 +55,8 @@ interface VersionParams {
     target_language: string;
 }
 
+type PageEdge = 'start' | 'last';
+
 function readStoredLayout(): ReaderLayout {
     if (typeof window === 'undefined') {
         return 'spread';
@@ -64,6 +68,27 @@ function readStoredLayout(): ReaderLayout {
         return stored === 'single' ? 'single' : 'spread';
     } catch {
         return 'spread';
+    }
+}
+
+function readStoredSidebar(): boolean {
+    if (typeof window === 'undefined') {
+        return true;
+    }
+
+    try {
+        return window.localStorage.getItem(SIDEBAR_KEY) !== 'closed';
+    } catch {
+        return true;
+    }
+}
+
+function persistSidebar(open: boolean): void {
+    try {
+        window.localStorage.setItem(SIDEBAR_KEY, open ? 'open' : 'closed');
+    } catch {
+        // La preferenza è solo un miglioramento: se il browser la blocca
+        // il lettore continua a funzionare con il valore in memoria.
     }
 }
 
@@ -87,12 +112,14 @@ export default function Reader({
 }: ReaderProps) {
     const { t } = useTranslation();
     const wideScreen = useMediaQuery('(min-width: 1280px)');
+    const largeScreen = useMediaQuery('(min-width: 1024px)');
 
     const [selectedVersion, setSelectedVersion] = useState<ReaderVersion | null>(initialVersion);
     const [index, setIndex] = useState<ReaderIndex>(readerIndex);
     const [currentPageId, setCurrentPageId] = useState<number | null>(initialPageId);
     const [scope, setScope] = useState<ReaderScope>(initialScope);
     const [layout, setLayout] = useState<ReaderLayout>(readStoredLayout);
+    const [sidebarVisible, setSidebarVisible] = useState(readStoredSidebar);
     const [pages, setPages] = useState<Record<number, ReaderPageContent>>(() => {
         const loaded: Record<number, ReaderPageContent> = {};
 
@@ -105,9 +132,13 @@ export default function Reader({
     const [indexLoading, setIndexLoading] = useState(false);
     const [contentLoading, setContentLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [retryToken, setRetryToken] = useState(0);
+    const [screenIndex, setScreenIndex] = useState(0);
+    const [screenCount, setScreenCount] = useState(0);
     const requestedPages = useRef<Set<number>>(new Set());
+    const screenCountRef = useRef(0);
+    const pendingLastScreen = useRef(false);
 
     const currentPage = useMemo(
         () => index.pages.find((page) => page.id === currentPageId) ?? null,
@@ -154,10 +185,12 @@ export default function Reader({
         [currentPage, spreads],
     );
 
+    const scopedIndex = scopedPages.findIndex((page) => page.id === currentPageId);
+
     const effectiveSpread = layout === 'spread' && wideScreen && scope !== 'page';
     const activeLayout: ReaderLayout = effectiveSpread ? 'spread' : 'single';
 
-    const visiblePages = useMemo(() => {
+    const visibleIndexPages = useMemo(() => {
         if (effectiveSpread && spreadIndex >= 0) {
             return spreads[spreadIndex] ?? [];
         }
@@ -165,27 +198,41 @@ export default function Reader({
         return currentPage ? [currentPage] : [];
     }, [currentPage, effectiveSpread, spreadIndex, spreads]);
 
-    const visibleKey = visiblePages.map((page) => page.id).join(',');
+    const visibleKey = visibleIndexPages.map((page) => page.id).join(',');
 
-    const scopedIndex = scopedPages.findIndex((page) => page.id === currentPageId);
+    const visiblePageContents = useMemo(
+        () =>
+            visibleIndexPages
+                .map((page) => pages[page.id])
+                .filter((page): page is ReaderPageContent => page !== undefined),
+        [pages, visibleIndexPages],
+    );
 
-    const previousPageId = effectiveSpread
-        ? spreadIndex > 0
-            ? spreads[spreadIndex - 1]?.[0]?.id
-            : undefined
-        : scopedIndex > 0
-          ? scopedPages[scopedIndex - 1]?.id
-          : undefined;
+    const visibleReady =
+        visibleIndexPages.length > 0 &&
+        visiblePageContents.length === visibleIndexPages.length;
 
-    const nextPageId = effectiveSpread
-        ? spreadIndex >= 0 && spreadIndex < spreads.length - 1
-            ? spreads[spreadIndex + 1]?.[0]?.id
-            : undefined
-        : scopedIndex >= 0 && scopedIndex < scopedPages.length - 1
-          ? scopedPages[scopedIndex + 1]?.id
-          : undefined;
+    const previousTarget = useMemo<ReaderPageIndexItem | null>(() => {
+        if (effectiveSpread) {
+            return spreadIndex > 0 ? (spreads[spreadIndex - 1]?.[0] ?? null) : null;
+        }
 
-    const positions = visiblePages.map((page) => page.position);
+        return scopedIndex > 0 ? (scopedPages[scopedIndex - 1] ?? null) : null;
+    }, [effectiveSpread, scopedIndex, scopedPages, spreadIndex, spreads]);
+
+    const nextTarget = useMemo<ReaderPageIndexItem | null>(() => {
+        if (effectiveSpread) {
+            return spreadIndex >= 0 && spreadIndex < spreads.length - 1
+                ? (spreads[spreadIndex + 1]?.[0] ?? null)
+                : null;
+        }
+
+        return scopedIndex >= 0 && scopedIndex < scopedPages.length - 1
+            ? (scopedPages[scopedIndex + 1] ?? null)
+            : null;
+    }, [effectiveSpread, scopedIndex, scopedPages, spreadIndex, spreads]);
+
+    const positions = visibleIndexPages.map((page) => page.position);
     const firstPosition = positions.length > 0 ? Math.min(...positions) : null;
     const lastPosition = positions.length > 0 ? Math.max(...positions) : null;
     const locationLabel =
@@ -204,13 +251,107 @@ export default function Reader({
             : 0;
 
     const spreadUnavailable = !wideScreen || scope === 'page';
+    const currentScreen = screenCount > 0 ? Math.min(screenIndex, screenCount - 1) + 1 : 0;
 
-    useEffect(() => {
-        if (!selectedVersion || visiblePages.length === 0) {
+    const resetScreen = useCallback(() => {
+        pendingLastScreen.current = false;
+        setScreenIndex(0);
+    }, []);
+
+    const moveToPage = useCallback((target: ReaderPageIndexItem, edge: PageEdge = 'start') => {
+        screenCountRef.current = 0;
+        pendingLastScreen.current = edge === 'last';
+        setScreenCount(0);
+        setScreenIndex(0);
+        setCurrentPageId(target.id);
+    }, []);
+
+    const handleScreenCountChange = useCallback((count: number) => {
+        const previousCount = screenCountRef.current;
+
+        screenCountRef.current = count;
+        setScreenCount(count);
+
+        if (count <= 0) {
             return;
         }
 
-        const missing = visiblePages
+        setScreenIndex((current) => {
+            if (pendingLastScreen.current) {
+                pendingLastScreen.current = false;
+
+                return count - 1;
+            }
+
+            if (previousCount > 1 && previousCount !== count) {
+                const ratio = current / (previousCount - 1);
+
+                return Math.max(0, Math.min(count - 1, Math.round(ratio * (count - 1))));
+            }
+
+            return Math.min(current, count - 1);
+        });
+    }, []);
+
+    const canGoPrevious =
+        visibleReady && screenCount > 0 && (screenIndex > 0 || previousTarget !== null);
+    const canGoNext =
+        visibleReady && screenCount > 0 && (screenIndex < screenCount - 1 || nextTarget !== null);
+
+    const goPrevious = useCallback(() => {
+        if (!visibleReady || screenCount <= 0) {
+            return;
+        }
+
+        if (screenIndex > 0) {
+            setScreenIndex((current) => Math.max(0, current - 1));
+
+            return;
+        }
+
+        if (previousTarget) {
+            moveToPage(previousTarget, 'last');
+        }
+    }, [moveToPage, previousTarget, screenCount, screenIndex, visibleReady]);
+
+    const goNext = useCallback(() => {
+        if (!visibleReady || screenCount <= 0) {
+            return;
+        }
+
+        if (screenIndex < screenCount - 1) {
+            setScreenIndex((current) => Math.min(screenCount - 1, current + 1));
+
+            return;
+        }
+
+        if (nextTarget) {
+            moveToPage(nextTarget);
+        }
+    }, [moveToPage, nextTarget, screenCount, screenIndex, visibleReady]);
+
+    const navigation = useRef({
+        canGoPrevious,
+        canGoNext,
+        goPrevious,
+        goNext,
+        drawerOpen,
+    });
+
+    navigation.current = {
+        canGoPrevious,
+        canGoNext,
+        goPrevious,
+        goNext,
+        drawerOpen,
+    };
+
+    useEffect(() => {
+        if (!selectedVersion || visibleIndexPages.length === 0) {
+            return;
+        }
+
+        const missing = visibleIndexPages
             .map((page) => page.id)
             .filter((id) => !pages[id] && !requestedPages.current.has(id));
 
@@ -223,6 +364,7 @@ export default function Reader({
         }
 
         const controller = new AbortController();
+        let settled = false;
         setContentLoading(true);
         setError(null);
 
@@ -235,6 +377,7 @@ export default function Reader({
                 signal: controller.signal,
             })
             .then(({ data }) => {
+                settled = true;
                 setPages((previous) => {
                     const next = { ...previous };
 
@@ -250,6 +393,8 @@ export default function Reader({
                     return;
                 }
 
+                settled = true;
+
                 for (const id of missing) {
                     requestedPages.current.delete(id);
                 }
@@ -262,32 +407,18 @@ export default function Reader({
                 }
             });
 
-        return () => controller.abort();
-    }, [book.id, pages, retryToken, selectedVersion, t, visibleKey]);
+        return () => {
+            controller.abort();
 
-    useEffect(() => {
-        const handler = (event: KeyboardEvent) => {
-            const target = event.target as HTMLElement | null;
-
-            if (target?.closest('input, textarea, select, [contenteditable="true"]')) {
-                return;
-            }
-
-            if (event.key === 'ArrowLeft' && previousPageId !== undefined) {
-                event.preventDefault();
-                setCurrentPageId(previousPageId);
-            }
-
-            if (event.key === 'ArrowRight' && nextPageId !== undefined) {
-                event.preventDefault();
-                setCurrentPageId(nextPageId);
+            if (!settled) {
+                for (const id of missing) {
+                    requestedPages.current.delete(id);
+                }
             }
         };
+    }, [book.id, pages, retryToken, selectedVersion, t, visibleIndexPages]);
 
-        window.addEventListener('keydown', handler);
-
-        return () => window.removeEventListener('keydown', handler);
-    }, [nextPageId, previousPageId]);
+    useEffect(() => subscribeReaderKeyboard(navigation), []);
 
     useEffect(() => {
         if (!selectedVersion) {
@@ -340,6 +471,7 @@ export default function Reader({
             setIndex(data.index);
             setPages({});
             requestedPages.current.clear();
+            resetScreen();
             setCurrentPageId(nearestPageId(data.index.pages, previous));
         } catch {
             setError(t('reader.loadError'));
@@ -359,6 +491,31 @@ export default function Reader({
         }
     };
 
+    const changeScope = (nextScope: ReaderScope) => {
+        if (nextScope === scope) {
+            return;
+        }
+
+        resetScreen();
+        setScope(nextScope);
+    };
+
+    const openSidebar = () => {
+        if (largeScreen) {
+            setSidebarVisible(true);
+            persistSidebar(true);
+
+            return;
+        }
+
+        setDrawerOpen(true);
+    };
+
+    const closeSidebar = () => {
+        setSidebarVisible(false);
+        persistSidebar(false);
+    };
+
     const selectChapter = (chapterId: number) => {
         const firstPage = index.pages.find((page) => page.chapter_id === chapterId);
 
@@ -366,17 +523,19 @@ export default function Reader({
             return;
         }
 
+        resetScreen();
         setCurrentPageId(firstPage.id);
 
         if (scope === 'page') {
             setScope('chapter');
         }
 
-        setSidebarOpen(false);
+        setDrawerOpen(false);
     };
 
     const retry = () => {
         requestedPages.current.clear();
+        resetScreen();
         setPages({});
         setError(null);
         setRetryToken((token) => token + 1);
@@ -426,7 +585,7 @@ export default function Reader({
                 { value: 'chapter', label: t('reader.scopeChapter') },
                 { value: 'book', label: t('reader.scopeBook') },
             ]}
-            onChange={(value) => setScope(value as ReaderScope)}
+            onChange={(value) => changeScope(value as ReaderScope)}
         />
     );
 
@@ -442,13 +601,16 @@ export default function Reader({
                             aria-label={t('reader.backAria')}
                         />
                     </Tooltip>
-                    <Button
-                        className="lg:hidden"
-                        type="text"
-                        icon={<MenuOutlined />}
-                        onClick={() => setSidebarOpen(true)}
-                        aria-label={t('reader.menuAria')}
-                    />
+                    {(!largeScreen || !sidebarVisible) && (
+                        <Tooltip title={t('reader.openSidebar')}>
+                            <Button
+                                type="text"
+                                icon={<MenuOutlined />}
+                                onClick={openSidebar}
+                                aria-label={t('reader.openSidebar')}
+                            />
+                        </Tooltip>
+                    )}
 
                     <div className="min-w-0 flex-1">
                         <h1 className="truncate font-reading text-base leading-tight text-ink-900 sm:text-lg">
@@ -484,22 +646,25 @@ export default function Reader({
                 </div>
             </header>
 
-            <div className="flex min-h-0 flex-1">
-                <aside className="hidden w-[300px] shrink-0 border-r border-parchment-200 lg:block xl:w-[320px]">
-                    <ReaderSidebar
-                        book={book}
-                        chapters={chapters}
-                        chapterCounts={chapterCounts}
-                        currentChapterId={currentChapterId}
-                        translatedPages={index.translated_pages}
-                        onSelectChapter={selectChapter}
-                    />
-                </aside>
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+                {sidebarVisible && (
+                    <aside className="hidden w-[300px] shrink-0 border-r border-parchment-200 lg:block xl:w-[320px]">
+                        <ReaderSidebar
+                            book={book}
+                            chapters={chapters}
+                            chapterCounts={chapterCounts}
+                            currentChapterId={currentChapterId}
+                            translatedPages={index.translated_pages}
+                            onSelectChapter={selectChapter}
+                            onClose={closeSidebar}
+                        />
+                    </aside>
+                )}
 
-                <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+                <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
                     {error && (
                         <Alert
-                            className="m-3"
+                            className="absolute inset-x-3 top-3 z-20 shadow-sm"
                             type="error"
                             showIcon
                             title={error}
@@ -542,49 +707,57 @@ export default function Reader({
                                 </Button>
                             </Empty>
                         </div>
+                    ) : !visibleReady ? (
+                        <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-sm text-ink-500">
+                            {contentLoading ? (
+                                <>
+                                    <Spin size="large" />
+                                    <span>{t('reader.loading')}</span>
+                                </>
+                            ) : (
+                                <Empty description={t('reader.emptyPage')} />
+                            )}
+                        </div>
                     ) : (
-                        <div className="mx-auto w-full max-w-[1240px] px-3 py-6 sm:px-6 lg:px-10">
+                        <div className="absolute inset-0 px-5 py-4 sm:px-14 sm:py-6 lg:px-16">
                             <div
                                 className={
                                     effectiveSpread
-                                        ? 'reader-spread grid grid-cols-2 divide-x divide-parchment-200'
-                                        : 'mx-auto max-w-[46rem]'
+                                        ? 'mx-auto h-full w-full max-w-[1200px]'
+                                        : 'mx-auto h-full w-full max-w-[46rem]'
                                 }
                             >
-                                {visiblePages.map((pageInfo: ReaderPageIndexItem) => {
-                                    const page = pages[pageInfo.id];
-
-                                    return (
-                                        <div
-                                            key={pageInfo.id}
-                                            className={
-                                                effectiveSpread
-                                                    ? 'min-h-[62vh] px-5 py-8 sm:px-8'
-                                                    : 'py-2'
-                                            }
-                                        >
-                                            {page ? (
-                                                <ReaderPageView
-                                                    page={page}
-                                                    locale={selectedVersion?.target_language}
-                                                    spread={effectiveSpread}
-                                                />
-                                            ) : (
-                                                <div className="flex min-h-[240px] items-center justify-center">
-                                                    {contentLoading ? (
-                                                        <Spin />
-                                                    ) : (
-                                                        <Empty
-                                                            description={t('reader.emptyPage')}
-                                                        />
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })}
+                                <ReaderCanvas
+                                    key={`${visibleKey}:${activeLayout}`}
+                                    pages={visiblePageContents}
+                                    columns={effectiveSpread ? 2 : 1}
+                                    screenIndex={screenIndex}
+                                    locale={selectedVersion?.target_language}
+                                    onScreenCountChange={handleScreenCountChange}
+                                />
                             </div>
                         </div>
+                    )}
+
+                    {!indexLoading && index.pages.length > 0 && visibleReady && (
+                        <>
+                            <Button
+                                className="reader-edge-arrow absolute left-2 top-1/2 z-10 hidden -translate-y-1/2 sm:inline-flex"
+                                shape="circle"
+                                icon={<LeftOutlined />}
+                                onClick={goPrevious}
+                                disabled={!canGoPrevious}
+                                aria-label={t('reader.previous')}
+                            />
+                            <Button
+                                className="reader-edge-arrow absolute right-2 top-1/2 z-10 hidden -translate-y-1/2 sm:inline-flex"
+                                shape="circle"
+                                icon={<RightOutlined />}
+                                onClick={goNext}
+                                disabled={!canGoNext}
+                                aria-label={t('reader.next')}
+                            />
+                        </>
                     )}
                 </main>
             </div>
@@ -601,32 +774,38 @@ export default function Reader({
                             style={{ width: `${progress}%` }}
                         />
                     </div>
-                    <span className="whitespace-nowrap text-[11px] text-ink-500">
+                    <span className="hidden whitespace-nowrap text-[11px] text-ink-500 sm:inline">
                         {locationLabel}
                     </span>
+                    {visibleReady && screenCount > 0 && (
+                        <span className="whitespace-nowrap text-[11px] tabular-nums text-ink-500">
+                            {t('reader.screenOf', {
+                                current: currentScreen,
+                                total: screenCount,
+                            })}
+                        </span>
+                    )}
                 </div>
 
                 <Button
                     size="small"
                     icon={<LeftOutlined />}
-                    onClick={() =>
-                        previousPageId !== undefined && setCurrentPageId(previousPageId)
-                    }
-                    disabled={previousPageId === undefined}
+                    onClick={goPrevious}
+                    disabled={!canGoPrevious}
                     aria-label={t('reader.previous')}
                 />
                 <Button
                     size="small"
                     icon={<RightOutlined />}
-                    onClick={() => nextPageId !== undefined && setCurrentPageId(nextPageId)}
-                    disabled={nextPageId === undefined}
+                    onClick={goNext}
+                    disabled={!canGoNext}
                     aria-label={t('reader.next')}
                 />
             </footer>
 
             <Drawer
-                open={sidebarOpen}
-                onClose={() => setSidebarOpen(false)}
+                open={drawerOpen}
+                onClose={() => setDrawerOpen(false)}
                 placement="left"
                 width={320}
                 closable={false}
@@ -639,6 +818,7 @@ export default function Reader({
                     currentChapterId={currentChapterId}
                     translatedPages={index.translated_pages}
                     onSelectChapter={selectChapter}
+                    onClose={() => setDrawerOpen(false)}
                 />
             </Drawer>
         </div>

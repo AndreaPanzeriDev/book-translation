@@ -1,5 +1,5 @@
-import { BookOutlined } from '@ant-design/icons';
-import { Tag } from 'antd';
+import { BookOutlined, CloseOutlined } from '@ant-design/icons';
+import { Button, Tag, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 
 import { languageLabel } from '@/lib/languages';
@@ -12,6 +12,7 @@ interface ReaderSidebarProps {
     currentChapterId: number | null;
     translatedPages: number;
     onSelectChapter: (chapterId: number) => void;
+    onClose?: () => void;
 }
 
 export default function ReaderSidebar({
@@ -21,6 +22,7 @@ export default function ReaderSidebar({
     currentChapterId,
     translatedPages,
     onSelectChapter,
+    onClose,
 }: ReaderSidebarProps) {
     const { t } = useTranslation();
 
@@ -45,7 +47,7 @@ export default function ReaderSidebar({
                         )}
                     </div>
 
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                         <h1 className="font-reading text-lg leading-snug text-ink-900">
                             {book.title}
                         </h1>
@@ -59,6 +61,19 @@ export default function ReaderSidebar({
                             {t('reader.translatedPages', { count: translatedPages })}
                         </p>
                     </div>
+
+                    {onClose && (
+                        <Tooltip title={t('reader.closeSidebar')}>
+                            <Button
+                                className="-mr-2 -mt-1 shrink-0"
+                                type="text"
+                                size="small"
+                                icon={<CloseOutlined />}
+                                onClick={onClose}
+                                aria-label={t('reader.closeSidebar')}
+                            />
+                        </Tooltip>
+                    )}
                 </div>
             </div>
 

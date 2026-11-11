@@ -163,8 +163,81 @@ body {
     line-height: 1.72;
 }
 
-.reader-spread .reader-page {
-    max-width: 38rem;
+.reader-flow {
+    --reader-column-gap: 2.5rem;
+
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    column-fill: auto;
+    column-gap: var(--reader-column-gap);
+    overflow-wrap: break-word;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+}
+
+.reader-flow--single {
+    column-count: 1;
+}
+
+.reader-flow--spread {
+    column-count: 2;
+}
+
+.reader-flow::-webkit-scrollbar {
+    display: none;
+}
+
+.reader-flow-page {
+    break-inside: auto;
+}
+
+.reader-flow-page + .reader-flow-page {
+    break-before: column;
+}
+
+.reader-flow-page > .reader-page > header {
+    break-after: avoid;
+}
+
+.reader-flow .reading-pane h1,
+.reader-flow .reading-pane h2,
+.reader-flow .reading-pane h3,
+.reader-flow .reading-pane h4,
+.reader-flow .reading-pane h5,
+.reader-flow .reading-pane h6 {
+    break-after: avoid;
+}
+
+.reader-flow .reading-pane p {
+    orphans: 2;
+    widows: 2;
+}
+
+.reader-flow-page:last-child .reading-pane > :last-child {
+    margin-bottom: 0;
+}
+
+.reader-edge-arrow {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-color: color-mix(in srgb, var(--color-parchment-200) 80%, transparent);
+    background: color-mix(in srgb, white 92%, transparent);
+    color: var(--color-leather-700);
+    box-shadow: 0 8px 24px rgb(74 54 38 / 14%);
+    backdrop-filter: blur(6px);
+}
+
+.reader-edge-arrow:not(:disabled):hover {
+    border-color: var(--color-leather-600);
+    background: white;
+    color: var(--color-ink-900);
+}
+
+@media (min-width: 1280px) {
+    .reader-flow {
+        --reader-column-gap: 3.25rem;
+    }
 }
 
 @keyframes reader-page-in {
