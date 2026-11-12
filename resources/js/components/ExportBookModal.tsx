@@ -375,7 +375,7 @@ export default function ExportBookModal({
 
             <div className="mt-4 space-y-5">
                 <div>
-                    <div className="mb-1.5 text-sm font-medium text-ink-800">
+                    <div className="mb-1.5 text-sm font-medium text-ink-900">
                         {t('export.version')}
                     </div>
 
@@ -400,7 +400,7 @@ export default function ExportBookModal({
 
                 <div>
                     <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-                        <span className="flex items-center gap-2 text-sm font-medium text-ink-800">
+                        <span className="flex items-center gap-2 text-sm font-medium text-ink-900">
                             {t('export.chapters')}
                             {loadingCoverage && <Spin size="small" />}
                         </span>
@@ -442,7 +442,7 @@ export default function ExportBookModal({
                                         }
                                     />
                                     <span className="min-w-0 flex-1">
-                                        <span className="block truncate text-sm text-ink-800">
+                                        <span className="block truncate text-sm text-ink-900">
                                             {chapter.title}
                                         </span>
                                         <span className="text-[11px] text-ink-500">
@@ -454,9 +454,11 @@ export default function ExportBookModal({
                                     </span>
                                     {coverageReady &&
                                         (complete ? (
-                                            <Tag color="green">{t('export.complete')}</Tag>
+                                            <Tag className="border-success-green/40! bg-success-green/10! text-ink-900!">
+                                                {t('export.complete')}
+                                            </Tag>
                                         ) : (
-                                            <Tag color="orange">
+                                            <Tag className="border-warning-gold/40! bg-warning-gold/10! text-ink-900!">
                                                 {t('export.incomplete', { count: missing })}
                                             </Tag>
                                         ))}

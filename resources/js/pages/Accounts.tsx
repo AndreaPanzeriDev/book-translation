@@ -197,17 +197,18 @@ export default function Accounts({ accounts }: Props) {
                                             </h2>
                                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                                                 <Tag>{providerLabel(account.provider)}</Tag>
-                                                <Tag color={account.is_active ? 'green' : 'default'}>
+                                                <Tag
+                                                    className={
+                                                        account.is_active
+                                                            ? 'border-success-green/40! bg-success-green/10! text-ink-900!'
+                                                            : undefined
+                                                    }
+                                                >
                                                     {account.is_active
                                                         ? t('accounts.statusActive')
                                                         : t('accounts.statusInactive')}
                                                 </Tag>
                                                 <Tag
-                                                    color={
-                                                        account.request_mode === 'parallel'
-                                                            ? 'blue'
-                                                            : 'default'
-                                                    }
                                                     icon={
                                                         account.request_mode === 'parallel' ? (
                                                             <ThunderboltOutlined />
@@ -223,7 +224,10 @@ export default function Accounts({ accounts }: Props) {
                                                         : t('accounts.modeSerial')}
                                                 </Tag>
                                                 {account.has_api_key ? (
-                                                    <Tag icon={<KeyOutlined />} color="gold">
+                                                    <Tag
+                                                        icon={<KeyOutlined />}
+                                                        className="border-warning-gold/40! bg-warning-gold/10! text-ink-900!"
+                                                    >
                                                         {t('accounts.keySaved')}
                                                     </Tag>
                                                 ) : (

@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import TranslationBatchPanel from '@/components/TranslationBatchPanel';
 import { TranslationBatchProvider } from '@/contexts/TranslationBatchProvider';
 import { initI18n, normalizeLocale } from '@/i18n';
+import { antdTheme, palette } from '@/lib/theme';
 
 const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content;
 
@@ -38,27 +39,7 @@ function RootProviders({ children }: { children: ReactNode }) {
         <StyleProvider layer>
             <ConfigProvider
                 locale={locale === 'en' ? enUS : itIT}
-                theme={{
-                    token: {
-                        colorPrimary: '#8b5e3c',
-                        colorInfo: '#8b5e3c',
-                        colorSuccess: '#4f7a5b',
-                        colorWarning: '#c28a2e',
-                        colorError: '#a94442',
-                        borderRadius: 8,
-                        fontFamily: "'Instrument Sans', ui-sans-serif, system-ui, sans-serif",
-                    },
-                    components: {
-                        Layout: {
-                            bodyBg: '#fbf8f3',
-                            headerBg: '#fffdf9',
-                            siderBg: '#fffdf9',
-                        },
-                        Menu: {
-                            itemBg: 'transparent',
-                        },
-                    },
-                }}
+                theme={antdTheme}
             >
                 <AntdApp>
                     <TranslationBatchProvider>
@@ -94,6 +75,6 @@ createInertiaApp({
         );
     },
     progress: {
-        color: '#8b5e3c',
+        color: palette.leather600,
     },
 });

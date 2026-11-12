@@ -1,6 +1,12 @@
-import { DeleteOutlined, InboxOutlined, ReadOutlined, RocketOutlined } from '@ant-design/icons';
-import { Link, router } from '@inertiajs/react';
-import { Alert, App, Button, Popconfirm, Tag, Upload } from 'antd';
+import {
+    ArrowRightOutlined,
+    DeleteOutlined,
+    InboxOutlined,
+    ReadOutlined,
+    RocketOutlined,
+} from '@ant-design/icons';
+import { Head, Link, router } from '@inertiajs/react';
+import { Alert, App, Button, Drawer, Popconfirm, Tag, Upload } from 'antd';
 import type { UploadFile } from 'antd';
 import { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
@@ -17,14 +23,16 @@ interface Props {
 }
 
 export default function Library({ books, accountsCount }: Props) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const { message } = App.useApp();
     const [file, setFile] = useState<File | null>(null);
     const [fileList, setFileList] = useState<UploadFile[]>([]);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [importOpen, setImportOpen] = useState(false);
 
     const totalPages = books.reduce((total, book) => total + book.pages_count, 0);
+    const numberFormat = new Intl.NumberFormat(i18n.language);
 
     const importBook = () => {
         if (!file) {
@@ -55,160 +63,183 @@ export default function Library({ books, accountsCount }: Props) {
         );
     };
 
-    return (
-        <AppLayout>
-            <section className="mb-6 overflow-hidden rounded-2xl border border-parchment-200 bg-gradient-to-br from-white via-parchment-50 to-leather-100 p-6 md:p-8">
-                <div className="grid gap-8 lg:grid-cols-[1.25fr_1fr] lg:items-center">
-                    <div>
-                        <Tag color="gold" className="mb-3">
-                            {t('library.heroBadge')}
-                        </Tag>
-                        <h1 className="max-w-2xl font-reading text-3xl leading-tight text-ink-900 md:text-4xl">
-                            {t('library.heroTitle')}
-                        </h1>
-                        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-700 md:text-base">
-                            {t('library.heroDescription')}
-                        </p>
+    const importHeader = (
+        <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+                <h2 className="text-base font-semibold text-ink-900">
+                    {t('library.importTitle')}
+                </h2>
+                <p className="text-xs text-ink-500">
+                    {t('library.importDescription')}
+                </p>
+            </div>
+            <ReadOutlined className="mt-0.5 text-xl text-leather-600" />
+        </div>
+    );
 
-                        <div className="mt-5 flex flex-wrap gap-3">
-                            <div className="rounded-lg border border-parchment-200 bg-white/80 px-4 py-3">
-                                <div className="text-2xl font-semibold text-ink-900">{books.length}</div>
-                                <div className="text-xs uppercase tracking-wide text-ink-500">
-                                    {t('common.books', { count: books.length })}
-                                </div>
-                            </div>
-                            <div className="rounded-lg border border-parchment-200 bg-white/80 px-4 py-3">
-                                <div className="text-2xl font-semibold text-ink-900">{totalPages}</div>
-                                <div className="text-xs uppercase tracking-wide text-ink-500">
-                                    {t('common.virtualPages', { count: totalPages })}
-                                </div>
-                            </div>
-                            <div className="rounded-lg border border-parchment-200 bg-white/80 px-4 py-3">
-                                <div className="text-2xl font-semibold text-ink-900">{accountsCount}</div>
-                                <div className="text-xs uppercase tracking-wide text-ink-500">
-                                    {t('common.activeAccounts', { count: accountsCount })}
-                                </div>
-                            </div>
-                        </div>
+    const importForm = (
+        <>
+            <Dragger
+                accept=".epub,application/epub+zip"
+                maxCount={1}
+                fileList={fileList}
+                disabled={uploading}
+                beforeUpload={(selectedFile) => {
+                    setFile(selectedFile);
+                    setFileList([
+                        {
+                            uid: selectedFile.uid,
+                            name: selectedFile.name,
+                            size: selectedFile.size,
+                            status: 'done',
+                        },
+                    ]);
+                    return false;
+                }}
+                onRemove={() => {
+                    setFile(null);
+                    setFileList([]);
+                }}
+                className="bg-parchment-50! [&_.ant-upload-drag]:max-h-[220px]"
+            >
+                <p className="ant-upload-drag-icon">
+                    <InboxOutlined className="text-leather-600!" />
+                </p>
+                <p className="ant-upload-text">{t('library.importDrag')}</p>
+                <p className="ant-upload-hint text-ink-500!">{t('library.importHint')}</p>
+            </Dragger>
+
+            {uploading && (
+                <div className="mt-3">
+                    <div className="mb-1 flex justify-between text-xs text-ink-500">
+                        <span>{t('library.importing')}</span>
+                        <span>{progress}%</span>
                     </div>
-
-                    <div className="rounded-xl border border-parchment-200 bg-white/85 p-4 shadow-sm">
-                        <div className="mb-3 flex items-center justify-between gap-2">
-                            <div>
-                                <h2 className="text-base font-semibold text-ink-900">
-                                    {t('library.importTitle')}
-                                </h2>
-                                <p className="text-xs text-ink-500">
-                                    {t('library.importDescription')}
-                                </p>
-                            </div>
-                            <ReadOutlined className="text-xl text-leather-600" />
-                        </div>
-
-                        <Dragger
-                            accept=".epub,application/epub+zip"
-                            maxCount={1}
-                            fileList={fileList}
-                            disabled={uploading}
-                            beforeUpload={(selectedFile) => {
-                                setFile(selectedFile);
-                                setFileList([
-                                    {
-                                        uid: selectedFile.uid,
-                                        name: selectedFile.name,
-                                        size: selectedFile.size,
-                                        status: 'done',
-                                    },
-                                ]);
-                                return false;
-                            }}
-                            onRemove={() => {
-                                setFile(null);
-                                setFileList([]);
-                            }}
-                            className="bg-parchment-50!"
-                        >
-                            <p className="ant-upload-drag-icon">
-                                <InboxOutlined className="text-leather-600!" />
-                            </p>
-                            <p className="ant-upload-text">{t('library.importDrag')}</p>
-                            <p className="ant-upload-hint">{t('library.importHint')}</p>
-                        </Dragger>
-
-                        {uploading && (
-                            <div className="mt-3">
-                                <div className="mb-1 flex justify-between text-xs text-ink-500">
-                                    <span>{t('library.importing')}</span>
-                                    <span>{progress}%</span>
-                                </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-parchment-200">
-                                    <div
-                                        className="h-full rounded-full bg-leather-600 transition-all"
-                                        style={{ width: `${progress}%` }}
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        <Button
-                            type="primary"
-                            size="large"
-                            block
-                            className="mt-3"
-                            icon={<RocketOutlined />}
-                            disabled={!file}
-                            loading={uploading}
-                            onClick={importBook}
-                        >
-                            {t('library.importSubmit')}
-                        </Button>
-
-                        {accountsCount === 0 && (
-                            <Alert
-                                className="mt-3"
-                                type="warning"
-                                showIcon
-                                title={t('library.noAccountsTitle')}
-                                description={
-                                    <Trans
-                                        i18nKey="library.noAccountsDescription"
-                                        components={{ link: <Link href="/accounts" /> }}
-                                    />
-                                }
-                            />
-                        )}
+                    <div className="h-1.5 overflow-hidden rounded-full bg-parchment-200">
+                        <div
+                            className="h-full rounded-full bg-leather-600 transition-all"
+                            style={{ width: `${progress}%` }}
+                        />
                     </div>
                 </div>
+            )}
+
+            <Button
+                type="primary"
+                size="large"
+                block
+                className="mt-3"
+                icon={<RocketOutlined />}
+                disabled={!file}
+                loading={uploading}
+                onClick={importBook}
+            >
+                {t('library.importSubmit')}
+            </Button>
+
+            {accountsCount === 0 && (
+                <Alert
+                    className="mt-3"
+                    type="warning"
+                    showIcon
+                    title={t('library.noAccountsTitle')}
+                    description={
+                        <Trans
+                            i18nKey="library.noAccountsDescription"
+                            components={{ link: <Link href="/accounts" /> }}
+                        />
+                    }
+                />
+            )}
+        </>
+    );
+
+    if (books.length === 0) {
+        return (
+            <AppLayout>
+                <Head title={t('library.documentTitle')} />
+                <section className="mb-6 overflow-hidden rounded-2xl border border-parchment-200 bg-white p-6 md:p-8">
+                    <div className="grid gap-8 lg:grid-cols-[1.25fr_1fr] lg:items-center">
+                        <div>
+                            <span className="mb-3 inline-flex items-center rounded-full border border-parchment-200 bg-parchment-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-700">
+                                {t('library.heroBadge')}
+                            </span>
+                            <h1 className="max-w-2xl font-reading text-3xl leading-tight text-ink-900 md:text-4xl">
+                                {t('library.heroTitle')}
+                            </h1>
+                            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-700 md:text-base">
+                                {t('library.heroDescription')}
+                            </p>
+                        </div>
+
+                        <div className="rounded-xl border border-parchment-200 bg-parchment-50 p-4">
+                            {importHeader}
+                            {importForm}
+                        </div>
+                    </div>
+                </section>
+            </AppLayout>
+        );
+    }
+
+    const booksSummary = t('library.summaryBooks', {
+        count: books.length,
+        formatted: numberFormat.format(books.length),
+    });
+    const pagesSummary = t('library.summaryPages', {
+        count: totalPages,
+        formatted: numberFormat.format(totalPages),
+    });
+    const accountsSummary = t('library.summaryAccounts', {
+        count: accountsCount,
+        formatted: numberFormat.format(accountsCount),
+    });
+
+    return (
+        <AppLayout>
+            <Head title={t('library.documentTitle')} />
+            <section className="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <h1 className="font-reading text-2xl leading-tight text-ink-900 md:text-3xl">
+                        {t('library.title')}
+                    </h1>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums text-ink-500">
+                        <span>{booksSummary}</span>
+                        <span aria-hidden="true" className="text-parchment-300">
+                            ·
+                        </span>
+                        <span>{pagesSummary}</span>
+                        <span aria-hidden="true" className="text-parchment-300">
+                            ·
+                        </span>
+                        <Link
+                            href="/accounts"
+                            className="text-leather-700 no-underline hover:underline"
+                        >
+                            {accountsSummary}
+                        </Link>
+                    </p>
+                </div>
+
+                <Button
+                    type="primary"
+                    icon={<InboxOutlined />}
+                    onClick={() => setImportOpen(true)}
+                >
+                    {t('library.importTitle')}
+                </Button>
             </section>
 
             <section>
-                <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                    <div>
-                        <h2 className="text-xl font-semibold text-ink-900">{t('library.title')}</h2>
-                        <p className="text-sm text-ink-500">
-                            {books.length === 0
-                                ? t('library.emptyDescription')
-                                : t('library.ready', { count: books.length })}
-                        </p>
-                    </div>
-                </div>
-
-                {books.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-parchment-300 bg-white/60 px-6 py-16 text-center">
-                        <ReadOutlined className="text-4xl text-parchment-300" />
-                        <h3 className="mt-4 text-lg font-medium text-ink-700">
-                            {t('library.emptyTitle')}
-                        </h3>
-                        <p className="mx-auto mt-1 max-w-md text-sm text-ink-500">
-                            {t('library.emptyHint')}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                        {books.map((book) => (
-                            <article
-                                key={book.id}
-                                className="flex flex-col overflow-hidden rounded-xl border border-parchment-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                    {books.map((book) => (
+                        <article
+                            key={book.id}
+                            className="group relative flex flex-col overflow-hidden rounded-xl border border-parchment-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md focus-within:ring-2 focus-within:ring-leather-600/40 focus-within:ring-offset-2 focus-within:ring-offset-parchment-50"
+                        >
+                            <Link
+                                href={`/books/${book.id}`}
+                                className="flex flex-1 flex-col no-underline focus-visible:outline-none"
                             >
                                 <div className="relative h-52 overflow-hidden bg-gradient-to-br from-parchment-100 to-parchment-200">
                                     {book.cover_url ? (
@@ -232,9 +263,9 @@ export default function Library({ books, accountsCount }: Props) {
                                 </div>
 
                                 <div className="flex flex-1 flex-col p-4">
-                                    <h3 className="line-clamp-2 font-reading text-lg leading-snug text-ink-900">
+                                    <h2 className="line-clamp-2 font-reading text-lg leading-snug text-ink-900 transition-colors group-hover:text-leather-700">
                                         {book.title}
-                                    </h3>
+                                    </h2>
                                     <p className="mt-0.5 line-clamp-1 text-sm text-ink-500">
                                         {book.author ?? t('common.authorUnknown')}
                                     </p>
@@ -244,42 +275,53 @@ export default function Library({ books, accountsCount }: Props) {
                                             {t('common.chapters', { count: book.chapters_count })}
                                         </Tag>
                                         <Tag>{t('common.pages', { count: book.pages_count })}</Tag>
-                                        <Tag color="gold">
+                                        <Tag className="border-warning-gold/40! bg-warning-gold/10! text-ink-900!">
                                             → {languageLabel(book.target_language)}
                                         </Tag>
                                     </div>
 
-                                    <div className="mt-auto flex items-center gap-2 pt-4">
-                                        <Button
-                                            type="primary"
-                                            block
-                                            onClick={() => router.visit(`/books/${book.id}`)}
-                                        >
-                                            {t('library.open')}
-                                        </Button>
-                                        <Popconfirm
-                                            title={t('library.deleteTitle')}
-                                            description={t('library.deleteDescription')}
-                                            okText={t('common.delete')}
-                                            cancelText={t('common.cancel')}
-                                            okButtonProps={{ danger: true }}
-                                            onConfirm={() =>
-                                                router.delete(`/books/${book.id}`, { preserveScroll: true })
-                                            }
-                                        >
-                                            <Button
-                                                danger
-                                                icon={<DeleteOutlined />}
-                                                aria-label={t('library.deleteAria')}
-                                            />
-                                        </Popconfirm>
-                                    </div>
+                                    <span className="mt-auto flex items-center gap-1.5 pt-4 text-sm font-medium text-leather-700">
+                                        {t('library.open')}
+                                        <ArrowRightOutlined className="text-xs transition-transform group-hover:translate-x-0.5" />
+                                    </span>
                                 </div>
-                            </article>
-                        ))}
-                    </div>
-                )}
+                            </Link>
+
+                            <Popconfirm
+                                title={t('library.deleteTitle')}
+                                description={t('library.deleteDescription')}
+                                okText={t('common.delete')}
+                                cancelText={t('common.cancel')}
+                                okButtonProps={{ danger: true }}
+                                onConfirm={() =>
+                                    router.delete(`/books/${book.id}`, { preserveScroll: true })
+                                }
+                            >
+                                <Button
+                                    danger
+                                    type="text"
+                                    icon={<DeleteOutlined />}
+                                    aria-label={t('library.deleteAria')}
+                                    className="absolute right-3 top-3 z-10 h-11! w-11! bg-white/90 shadow-sm backdrop-blur-sm"
+                                />
+                            </Popconfirm>
+                        </article>
+                    ))}
+                </div>
             </section>
+
+            <Drawer
+                title={t('library.importTitle')}
+                open={importOpen}
+                onClose={() => setImportOpen(false)}
+                size={440}
+                styles={{ body: { paddingTop: 16 } }}
+            >
+                <p className="mb-3 text-xs text-ink-500">
+                    {t('library.importDescription')}
+                </p>
+                {importForm}
+            </Drawer>
         </AppLayout>
     );
 }

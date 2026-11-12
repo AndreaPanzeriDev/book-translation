@@ -1,0 +1,629 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-12T20:44:46.253Z",
+  "title": "Design System: Book Translation Studio",
+  "extensions": {
+    "colorMeta": {
+      "parchment-50": {
+        "role": "neutral",
+        "displayName": "Unbleached Parchment",
+        "canonical": "#fbf8f3",
+        "purpose": "The page ground for the app shell, reader, and source pane.",
+        "tonalRamp": [
+          "oklch(0.150 0.0006 80.7)",
+          "oklch(0.264 0.0031 80.7)",
+          "oklch(0.379 0.0056 80.7)",
+          "oklch(0.493 0.0072 80.7)",
+          "oklch(0.607 0.0072 80.7)",
+          "oklch(0.721 0.0056 80.7)",
+          "oklch(0.836 0.0031 80.7)",
+          "oklch(0.950 0.0006 80.7)"
+        ]
+      },
+      "parchment-100": {
+        "role": "neutral",
+        "displayName": "Warm Parchment",
+        "canonical": "#f5efe5",
+        "purpose": "Recessed panels, inactive navigation, sidebar wash, and tags.",
+        "tonalRamp": [
+          "oklch(0.150 0.0012 80.7)",
+          "oklch(0.264 0.0062 80.7)",
+          "oklch(0.379 0.0113 80.7)",
+          "oklch(0.493 0.0144 80.7)",
+          "oklch(0.607 0.0144 80.7)",
+          "oklch(0.721 0.0113 80.7)",
+          "oklch(0.836 0.0062 80.7)",
+          "oklch(0.950 0.0012 80.7)"
+        ]
+      },
+      "parchment-200": {
+        "role": "neutral",
+        "displayName": "Parchment Edge",
+        "canonical": "#e9dfd0",
+        "purpose": "The default 1px border, divider, and progress track.",
+        "tonalRamp": [
+          "oklch(0.150 0.0018 78.2)",
+          "oklch(0.264 0.0096 78.2)",
+          "oklch(0.379 0.0175 78.2)",
+          "oklch(0.493 0.0223 78.2)",
+          "oklch(0.607 0.0223 78.2)",
+          "oklch(0.721 0.0175 78.2)",
+          "oklch(0.836 0.0096 78.2)",
+          "oklch(0.950 0.0018 78.2)"
+        ]
+      },
+      "parchment-300": {
+        "role": "neutral",
+        "displayName": "Deep Parchment",
+        "canonical": "#d8c6ad",
+        "purpose": "Dashed empty-state borders, muted icons, and blockquote rules.",
+        "tonalRamp": [
+          "oklch(0.150 0.0032 76.1)",
+          "oklch(0.264 0.0165 76.1)",
+          "oklch(0.379 0.0302 76.1)",
+          "oklch(0.493 0.0384 76.1)",
+          "oklch(0.607 0.0384 76.1)",
+          "oklch(0.721 0.0302 76.1)",
+          "oklch(0.836 0.0165 76.1)",
+          "oklch(0.950 0.0032 76.1)"
+        ]
+      },
+      "ink-900": {
+        "role": "neutral",
+        "displayName": "Oxide Ink",
+        "canonical": "#2b2520",
+        "purpose": "Primary text and headings.",
+        "tonalRamp": [
+          "oklch(0.150 0.0010 62.1)",
+          "oklch(0.264 0.0053 62.1)",
+          "oklch(0.379 0.0098 62.1)",
+          "oklch(0.493 0.0124 62.1)",
+          "oklch(0.607 0.0124 62.1)",
+          "oklch(0.721 0.0098 62.1)",
+          "oklch(0.836 0.0053 62.1)",
+          "oklch(0.950 0.0010 62.1)"
+        ]
+      },
+      "ink-700": {
+        "role": "neutral",
+        "displayName": "Soft Ink",
+        "canonical": "#4a4038",
+        "purpose": "Secondary prose, labels, and form values.",
+        "tonalRamp": [
+          "oklch(0.150 0.0015 60.8)",
+          "oklch(0.264 0.0080 60.8)",
+          "oklch(0.379 0.0147 60.8)",
+          "oklch(0.493 0.0187 60.8)",
+          "oklch(0.607 0.0187 60.8)",
+          "oklch(0.721 0.0147 60.8)",
+          "oklch(0.836 0.0080 60.8)",
+          "oklch(0.950 0.0015 60.8)"
+        ]
+      },
+      "ink-500": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#746a60",
+        "purpose": "Metadata, hints, timestamps, and quiet labels.",
+        "tonalRamp": [
+          "oklch(0.150 0.0016 67.4)",
+          "oklch(0.264 0.0083 67.4)",
+          "oklch(0.379 0.0152 67.4)",
+          "oklch(0.493 0.0193 67.4)",
+          "oklch(0.607 0.0193 67.4)",
+          "oklch(0.721 0.0152 67.4)",
+          "oklch(0.836 0.0083 67.4)",
+          "oklch(0.950 0.0016 67.4)"
+        ]
+      },
+      "leather-700": {
+        "role": "primary",
+        "displayName": "Dark Saddle Leather",
+        "canonical": "#6f4e37",
+        "purpose": "Brand tile, active navigation text, and reader arrows.",
+        "tonalRamp": [
+          "oklch(0.150 0.0045 55.6)",
+          "oklch(0.264 0.0237 55.6)",
+          "oklch(0.379 0.0434 55.6)",
+          "oklch(0.493 0.0552 55.6)",
+          "oklch(0.607 0.0552 55.6)",
+          "oklch(0.721 0.0434 55.6)",
+          "oklch(0.836 0.0237 55.6)",
+          "oklch(0.950 0.0045 55.6)"
+        ]
+      },
+      "leather-600": {
+        "role": "primary",
+        "displayName": "Aged Saddle Leather",
+        "canonical": "#8b5e3c",
+        "purpose": "Primary buttons, progress fills, active icons, and the Ant Design primary token.",
+        "tonalRamp": [
+          "oklch(0.150 0.0061 57.2)",
+          "oklch(0.264 0.0319 57.2)",
+          "oklch(0.379 0.0584 57.2)",
+          "oklch(0.493 0.0742 57.2)",
+          "oklch(0.607 0.0742 57.2)",
+          "oklch(0.721 0.0584 57.2)",
+          "oklch(0.836 0.0319 57.2)",
+          "oklch(0.950 0.0061 57.2)"
+        ]
+      },
+      "leather-100": {
+        "role": "primary",
+        "displayName": "Leather Wash",
+        "canonical": "#f2e7dc",
+        "purpose": "Active chapter rows and icon tile backgrounds.",
+        "tonalRamp": [
+          "oklch(0.150 0.0015 67.6)",
+          "oklch(0.264 0.0079 67.6)",
+          "oklch(0.379 0.0145 67.6)",
+          "oklch(0.493 0.0185 67.6)",
+          "oklch(0.607 0.0185 67.6)",
+          "oklch(0.721 0.0145 67.6)",
+          "oklch(0.836 0.0079 67.6)",
+          "oklch(0.950 0.0015 67.6)"
+        ]
+      },
+      "surface-white": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "canonical": "#ffffff",
+        "purpose": "Cards, toolbars, inputs, and any surface that must lift off the parchment.",
+        "tonalRamp": [
+          "oklch(0.150 0.0000 89.9)",
+          "oklch(0.264 0.0000 89.9)",
+          "oklch(0.379 0.0000 89.9)",
+          "oklch(0.493 0.0000 89.9)",
+          "oklch(0.607 0.0000 89.9)",
+          "oklch(0.721 0.0000 89.9)",
+          "oklch(0.836 0.0000 89.9)",
+          "oklch(0.950 0.0000 89.9)"
+        ]
+      },
+      "annotation-amber": {
+        "role": "tertiary",
+        "displayName": "Reading Amber",
+        "canonical": "#fee685",
+        "purpose": "Sentence-alignment highlight used at 80% opacity.",
+        "tonalRamp": [
+          "oklch(0.150 0.0096 95.8)",
+          "oklch(0.264 0.0503 95.8)",
+          "oklch(0.379 0.0920 95.8)",
+          "oklch(0.493 0.1170 95.8)",
+          "oklch(0.607 0.1170 95.8)",
+          "oklch(0.721 0.0920 95.8)",
+          "oklch(0.836 0.0503 95.8)",
+          "oklch(0.950 0.0096 95.8)"
+        ]
+      },
+      "success-green": {
+        "role": "status",
+        "displayName": "Success Green",
+        "canonical": "#4f7a5b",
+        "purpose": "Completed translation and complete export states.",
+        "tonalRamp": [
+          "oklch(0.150 0.0055 152.4)",
+          "oklch(0.264 0.0285 152.4)",
+          "oklch(0.379 0.0521 152.4)",
+          "oklch(0.493 0.0663 152.4)",
+          "oklch(0.607 0.0663 152.4)",
+          "oklch(0.721 0.0521 152.4)",
+          "oklch(0.836 0.0285 152.4)",
+          "oklch(0.950 0.0055 152.4)"
+        ]
+      },
+      "warning-gold": {
+        "role": "secondary",
+        "displayName": "Antique Gold",
+        "canonical": "#c28a2e",
+        "purpose": "Language direction, saved keys, warnings, and orientation metadata.",
+        "tonalRamp": [
+          "oklch(0.150 0.0099 75.5)",
+          "oklch(0.264 0.0520 75.5)",
+          "oklch(0.379 0.0951 75.5)",
+          "oklch(0.493 0.1209 75.5)",
+          "oklch(0.607 0.1209 75.5)",
+          "oklch(0.721 0.0951 75.5)",
+          "oklch(0.836 0.0520 75.5)",
+          "oklch(0.950 0.0099 75.5)"
+        ]
+      },
+      "danger-red": {
+        "role": "status",
+        "displayName": "Danger Red",
+        "canonical": "#a94442",
+        "purpose": "Destructive actions and failed translation states.",
+        "tonalRamp": [
+          "oklch(0.150 0.0107 24.0)",
+          "oklch(0.264 0.0559 24.0)",
+          "oklch(0.379 0.1023 24.0)",
+          "oklch(0.493 0.1301 24.0)",
+          "oklch(0.607 0.1301 24.0)",
+          "oklch(0.721 0.1023 24.0)",
+          "oklch(0.836 0.0559 24.0)",
+          "oklch(0.950 0.0107 24.0)"
+        ]
+      },
+      "danger-surface": {
+        "role": "status",
+        "displayName": "Danger Surface",
+        "canonical": "#fef2f2",
+        "purpose": "Soft error panels for batch failures and error details.",
+        "tonalRamp": [
+          "oklch(0.150 0.0010 17.4)",
+          "oklch(0.264 0.0054 17.4)",
+          "oklch(0.379 0.0099 17.4)",
+          "oklch(0.493 0.0126 17.4)",
+          "oklch(0.607 0.0126 17.4)",
+          "oklch(0.721 0.0099 17.4)",
+          "oklch(0.836 0.0054 17.4)",
+          "oklch(0.950 0.0010 17.4)"
+        ]
+      },
+      "danger-ink": {
+        "role": "status",
+        "displayName": "Danger Ink",
+        "canonical": "#b91c1c",
+        "purpose": "Readable error text on danger surfaces.",
+        "tonalRamp": [
+          "oklch(0.150 0.0152 27.5)",
+          "oklch(0.264 0.0796 27.5)",
+          "oklch(0.379 0.1457 27.5)",
+          "oklch(0.493 0.1852 27.5)",
+          "oklch(0.607 0.1852 27.5)",
+          "oklch(0.721 0.1457 27.5)",
+          "oklch(0.836 0.0796 27.5)",
+          "oklch(0.950 0.0152 27.5)"
+        ]
+      },
+      "placeholder-ink": {
+        "role": "neutral",
+        "displayName": "Placeholder Ink",
+        "canonical": "#746a60",
+        "purpose": "Empty translation placeholders and form placeholders. Mirrors Muted Ink so hints stay above 4.5:1 contrast.",
+        "tonalRamp": [
+          "oklch(0.150 0.0016 67.4)",
+          "oklch(0.264 0.0083 67.4)",
+          "oklch(0.379 0.0152 67.4)",
+          "oklch(0.493 0.0193 67.4)",
+          "oklch(0.607 0.0193 67.4)",
+          "oklch(0.721 0.0152 67.4)",
+          "oklch(0.836 0.0083 67.4)",
+          "oklch(0.950 0.0016 67.4)"
+        ]
+      },
+      "scrollbar-thumb": {
+        "role": "neutral",
+        "displayName": "Scrollbar Thumb",
+        "canonical": "#cfc3b4",
+        "purpose": "The thin custom scrollbar thumb across the app.",
+        "tonalRamp": [
+          "oklch(0.150 0.0020 73.6)",
+          "oklch(0.264 0.0103 73.6)",
+          "oklch(0.379 0.0188 73.6)",
+          "oklch(0.493 0.0240 73.6)",
+          "oklch(0.607 0.0240 73.6)",
+          "oklch(0.721 0.0188 73.6)",
+          "oklch(0.836 0.0103 73.6)",
+          "oklch(0.950 0.0020 73.6)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": [
+        "Display",
+        "Library hero headline only."
+      ],
+      "headline": [
+        "Headline",
+        "Page titles on the library, accounts, and studio surfaces."
+      ],
+      "title": [
+        "Title",
+        "Book and chapter titles in cards, sidebars, and empty states."
+      ],
+      "reading-heading": [
+        "Reading Heading",
+        "First-level headings inside the reading panes."
+      ],
+      "reading-subheading": [
+        "Reading Subheading",
+        "Second-level headings inside the reading panes."
+      ],
+      "reading": [
+        "Reading",
+        "Book prose in studio panes and the single-column reader canvas."
+      ],
+      "reading-spread": [
+        "Reading Spread",
+        "Book prose in the two-column reader spread."
+      ],
+      "body": [
+        "Body",
+        "Default UI text, descriptions, and form values."
+      ],
+      "navigation": [
+        "Navigation",
+        "Header navigation labels and active tabs."
+      ],
+      "caption": [
+        "Caption",
+        "Tags, metadata, timestamps, and helper text."
+      ],
+      "label": [
+        "Label",
+        "Uppercase section and pane labels."
+      ],
+      "micro": [
+        "Micro",
+        "Dense metadata in export rows and batch details."
+      ],
+      "micro-label": [
+        "Micro-label",
+        "Reader page headers and chapter position marks."
+      ],
+      "mono": [
+        "Mono",
+        "Model IDs, endpoints, source hashes, and tabular technical values."
+      ]
+    },
+    "shadows": [
+      {
+        "name": "card-rest",
+        "value": "0 1px 3px 0 #0000001a, 0 1px 2px -1px #0000001a",
+        "purpose": "Default white cards, toolbars, and the sticky app header."
+      },
+      {
+        "name": "card-hover",
+        "value": "0 4px 6px -1px #0000001a, 0 2px 4px -2px #0000001a",
+        "purpose": "Library cards on hover, paired with a 2px lift."
+      },
+      {
+        "name": "floating-work",
+        "value": "0 25px 50px -12px #00000040",
+        "purpose": "The global translation batch panel and other temporary floating surfaces."
+      },
+      {
+        "name": "reader-arrow",
+        "value": "0 8px 24px rgb(74 54 38 / 14%)",
+        "purpose": "Circular page-turn controls, paired with a 6px backdrop blur."
+      }
+    ],
+    "motion": [
+      {
+        "name": "page-enter",
+        "value": "220ms ease-out",
+        "purpose": "Reader page fade and 4px rise on entry."
+      },
+      {
+        "name": "hover-lift",
+        "value": "200ms ease",
+        "purpose": "Library card lift and shadow change on hover."
+      },
+      {
+        "name": "progress-width",
+        "value": "300ms ease",
+        "purpose": "Reader progress fill width transition."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "0ms",
+        "purpose": "Page-enter animation is removed under prefers-reduced-motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "2xl",
+        "value": "1536px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The affirmative action on a surface: import, translate, save, or download. Large size anchors page-level commitments.",
+      "html": "<div class=\"ds-btn-row\"><button class=\"ds-btn-primary\" type=\"button\">Translate selection</button><button class=\"ds-btn-primary ds-btn-primary--large\" type=\"button\">Import book</button></div>",
+      "css": ".ds-btn-row {\n  display: flex;\n  align-items: center;\n  flex-wrap: wrap;\n  gap: 12px;\n}\n.ds-btn-primary {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  height: 32px;\n  padding: 0 15px;\n  border: 1px solid transparent;\n  border-radius: 8px;\n  background: var(--color-leather-600);\n  color: #ffffff;\n  font-family: var(--font-sans);\n  font-size: 14px;\n  font-weight: 400;\n  line-height: 1;\n  cursor: pointer;\n  transition: background-color 200ms ease, border-color 200ms ease;\n}\n.ds-btn-primary--large {\n  height: 40px;\n  padding: 0 16px;\n  font-size: 16px;\n}\n.ds-btn-primary:hover {\n  background: var(--color-leather-700);\n}\n.ds-btn-primary:active {\n  background: var(--color-leather-700);\n  box-shadow: inset 0 1px 2px rgb(0 0 0 / 18%);\n}\n.ds-btn-primary:focus-visible {\n  outline: 2px solid color-mix(in srgb, var(--color-leather-600) 55%, transparent);\n  outline-offset: 2px;\n}"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Secondary action beside a primary one: read, export, sync, or test.",
+      "html": "<button class=\"ds-btn-default\" type=\"button\">Read book</button>",
+      "css": ".ds-btn-default {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  height: 32px;\n  padding: 0 15px;\n  border: 1px solid var(--color-parchment-200);\n  border-radius: 8px;\n  background: #ffffff;\n  color: var(--color-ink-900);\n  font-family: var(--font-sans);\n  font-size: 14px;\n  font-weight: 400;\n  line-height: 1;\n  cursor: pointer;\n  transition: color 200ms ease, border-color 200ms ease;\n}\n.ds-btn-default:hover {\n  border-color: var(--color-leather-600);\n  color: var(--color-leather-700);\n}\n.ds-btn-default:active {\n  border-color: var(--color-leather-700);\n  color: var(--color-leather-700);\n}\n.ds-btn-default:focus-visible {\n  outline: 2px solid color-mix(in srgb, var(--color-leather-600) 45%, transparent);\n  outline-offset: 2px;\n}"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "A quiet field for names, endpoints, keys, and model identifiers.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Search models\" aria-label=\"Search models\" />",
+      "css": ".ds-input {\n  box-sizing: border-box;\n  width: 100%;\n  height: 32px;\n  padding: 0 11px;\n  border: 1px solid var(--color-parchment-200);\n  border-radius: 8px;\n  background: #ffffff;\n  color: var(--color-ink-900);\n  font-family: var(--font-sans);\n  font-size: 14px;\n  line-height: 1.5;\n  transition: border-color 200ms ease, box-shadow 200ms ease;\n}\n.ds-input::placeholder {\n  color: var(--color-ink-500);\n}\n.ds-input:hover {\n  border-color: var(--color-parchment-300);\n}\n.ds-input:focus {\n  border-color: var(--color-leather-600);\n  outline: none;\n  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-leather-600) 18%, transparent);\n}"
+    },
+    {
+      "name": "Metadata Tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "Small parchment chips for language direction, counts, models, and status.",
+      "html": "<span class=\"ds-tag\">EN → IT</span>",
+      "css": ".ds-tag {\n  display: inline-flex;\n  align-items: center;\n  height: 22px;\n  padding: 0 7px;\n  border: 1px solid var(--color-parchment-200);\n  border-radius: 4px;\n  background: var(--color-parchment-100);\n  color: var(--color-ink-700);\n  font-family: var(--font-sans);\n  font-size: 12px;\n  font-weight: 400;\n  line-height: 20px;\n  white-space: nowrap;\n}"
+    },
+    {
+      "name": "Surface Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The standard white panel that lifts off the parchment ground.",
+      "html": "<article class=\"ds-card\"><p class=\"ds-card__eyebrow\">Chapter 3</p><h3 class=\"ds-card__title\">The Evening Train</h3><p class=\"ds-card__meta\">42 pages · 61,240 characters</p></article>",
+      "css": ".ds-card {\n  display: block;\n  padding: 16px;\n  border: 1px solid var(--color-parchment-200);\n  border-radius: 12px;\n  background: #ffffff;\n  color: var(--color-ink-900);\n  font-family: var(--font-sans);\n  box-shadow: 0 1px 3px 0 #0000001a, 0 1px 2px -1px #0000001a;\n}\n.ds-card__eyebrow {\n  margin: 0 0 4px;\n  color: var(--color-ink-500);\n  font-size: 12px;\n  font-weight: 600;\n  line-height: 1.5;\n  letter-spacing: 0.025em;\n  text-transform: uppercase;\n}\n.ds-card__title {\n  margin: 0;\n  color: var(--color-ink-900);\n  font-family: var(--font-reading);\n  font-size: 18px;\n  font-weight: 400;\n  line-height: 1.375;\n}\n.ds-card__meta {\n  margin: 4px 0 0;\n  color: var(--color-ink-500);\n  font-size: 12px;\n  line-height: 1.5;\n}"
+    },
+    {
+      "name": "App Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "The segmented header navigation: a parchment well with a white active pill.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main\"><a class=\"ds-nav-item ds-nav-item--active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M4 19.5A2.5 2.5 0 0 1 6.5 17H20\"></path><path d=\"M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z\"></path></svg>Library</a><a class=\"ds-nav-item ds-nav-item--idle\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><rect x=\"2\" y=\"2\" width=\"20\" height=\"8\" rx=\"2\"></rect><rect x=\"2\" y=\"14\" width=\"20\" height=\"8\" rx=\"2\"></rect><line x1=\"6\" y1=\"6\" x2=\"6.01\" y2=\"6\"></line><line x1=\"6\" y1=\"18\" x2=\"6.01\" y2=\"18\"></line></svg>Accounts</a></nav>",
+      "css": ".ds-nav {\n  display: inline-flex;\n  align-items: center;\n  gap: 4px;\n  padding: 4px;\n  border-radius: 8px;\n  background: color-mix(in srgb, var(--color-parchment-100) 80%, transparent);\n  font-family: var(--font-sans);\n}\n.ds-nav-item {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  height: 36px;\n  padding: 0 12px;\n  border-radius: 6px;\n  font-size: 14px;\n  font-weight: 500;\n  line-height: 1.4;\n  text-decoration: none;\n  transition: color 200ms ease, background-color 200ms ease;\n}\n.ds-nav-item--active {\n  background: #ffffff;\n  color: var(--color-leather-700);\n  box-shadow: 0 1px 3px 0 #0000001a, 0 1px 2px -1px #0000001a;\n}\n.ds-nav-item--idle {\n  background: transparent;\n  color: var(--color-ink-500);\n}\n.ds-nav-item--idle:hover {\n  color: var(--color-ink-900);\n}\n.ds-nav-item:focus-visible {\n  outline: 2px solid color-mix(in srgb, var(--color-leather-600) 45%, transparent);\n  outline-offset: 2px;\n}"
+    },
+    {
+      "name": "Active Chapter Row",
+      "kind": "custom",
+      "refersTo": "chapter-row-active",
+      "description": "The current chapter in the studio rail, with one thin coverage track per active translation slot.",
+      "html": "<div class=\"ds-chapter\"><button class=\"ds-chapter-row\" type=\"button\" aria-current=\"page\"><span class=\"ds-chapter-row__badge\">3</span><span class=\"ds-chapter-row__title\">The Evening Train</span><span class=\"ds-chapter-row__meta\">42 pages</span></button><div class=\"ds-chapter-row__tracks\"><span class=\"ds-chapter-row__bar\"><span class=\"ds-chapter-row__fill\"></span></span></div></div>",
+      "css": ".ds-chapter-row {\n  display: flex;\n  align-items: center;\n  gap: 8px;\n  width: 100%;\n  min-height: 44px;\n  padding: 6px 8px;\n  border: 0;\n  border-radius: 6px;\n  background: var(--color-leather-100);\n  color: var(--color-leather-700);\n  font-family: var(--font-sans);\n  font-size: 14px;\n  text-align: left;\n  cursor: pointer;\n}\n.ds-chapter-row__badge {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 24px;\n  height: 24px;\n  border-radius: 9999px;\n  background: var(--color-leather-600);\n  color: #ffffff;\n  font-size: 11px;\n  flex-shrink: 0;\n}\n.ds-chapter-row__title {\n  min-width: 0;\n  flex: 1;\n  overflow: hidden;\n  text-overflow: ellipsis;\n  white-space: nowrap;\n}\n.ds-chapter-row__meta {\n  flex-shrink: 0;\n  font-size: 11px;\n  font-variant-numeric: tabular-nums;\n}\n.ds-chapter-row__tracks {\n  display: flex;\n  flex-direction: column;\n  gap: 2px;\n  margin: 0 8px 6px 32px;\n}\n.ds-chapter-row__bar {\n  display: block;\n  height: 2px;\n  overflow: hidden;\n  border-radius: 9999px;\n  background: color-mix(in srgb, #ffffff 70%, transparent);\n}\n.ds-chapter-row__fill {\n  display: block;\n  width: 64%;\n  height: 100%;\n  border-radius: inherit;\n  background: color-mix(in srgb, var(--color-leather-600) 55%, transparent);\n}\n.ds-chapter-row:focus-visible {\n  outline: 2px solid color-mix(in srgb, var(--color-leather-600) 45%, transparent);\n  outline-offset: 2px;\n}"
+    },
+    {
+      "name": "Reader Edge Arrow",
+      "kind": "button",
+      "refersTo": "reader-edge-arrow",
+      "description": "The circular page-turn control that floats at the edge of the reader.",
+      "html": "<button class=\"ds-reader-arrow\" type=\"button\" aria-label=\"Next page\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><polyline points=\"9 18 15 12 9 6\"></polyline></svg></button>",
+      "css": ".ds-reader-arrow {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 44px;\n  height: 44px;\n  border: 1px solid color-mix(in srgb, var(--color-parchment-200) 80%, transparent);\n  border-radius: 9999px;\n  background: color-mix(in srgb, #ffffff 92%, transparent);\n  color: var(--color-leather-700);\n  box-shadow: 0 8px 24px rgb(74 54 38 / 14%);\n  backdrop-filter: blur(6px);\n  cursor: pointer;\n  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease;\n}\n.ds-reader-arrow:hover:not(:disabled) {\n  border-color: var(--color-leather-600);\n  background: #ffffff;\n  color: var(--color-ink-900);\n}\n.ds-reader-arrow:focus-visible {\n  outline: 2px solid color-mix(in srgb, var(--color-leather-600) 55%, transparent);\n  outline-offset: 2px;\n}\n.ds-reader-arrow:disabled {\n  opacity: 0.4;\n  cursor: not-allowed;\n}"
+    },
+    {
+      "name": "Comparison Pane",
+      "kind": "custom",
+      "refersTo": "comparison-pane",
+      "description": "The signature surface: original and translation side by side as flat panes, sentence-aligned.",
+      "html": "<div class=\"ds-comparison\"><section class=\"ds-pane ds-pane--source\"><span class=\"ds-pane__label\">Original · English</span><p class=\"ds-pane__text\">The train arrived at dusk, <mark>carrying the last letters of the day.</mark></p></section><section class=\"ds-pane\"><span class=\"ds-pane__label\">Translation 1</span><p class=\"ds-pane__text\">Il treno arrivò al crepuscolo, <mark>portando le ultime lettere del giorno.</mark></p></section></div>",
+      "css": ".ds-comparison {\n  display: grid;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n  gap: 20px;\n  font-family: var(--font-sans);\n}\n.ds-pane {\n  min-width: 0;\n  padding: 16px;\n  background: #ffffff;\n}\n.ds-pane--source {\n  background: color-mix(in srgb, var(--color-parchment-50) 70%, transparent);\n}\n.ds-pane__label {\n  display: block;\n  margin-bottom: 12px;\n  padding-bottom: 8px;\n  border-bottom: 1px solid var(--color-parchment-200);\n  color: var(--color-ink-500);\n  font-size: 12px;\n  font-weight: 600;\n  line-height: 1.4;\n  letter-spacing: 0.025em;\n  text-transform: uppercase;\n}\n.ds-pane__text {\n  margin: 0;\n  color: var(--color-ink-900);\n  font-family: var(--font-reading);\n  font-size: 17.2px;\n  line-height: 1.8;\n  text-align: justify;\n  hyphens: auto;\n}\n.ds-pane__text mark {\n  background: color-mix(in srgb, var(--color-annotation-amber) 80%, transparent);\n  color: inherit;\n}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Translator's Desk",
+    "overview": "This is a working desk, not a dashboard: warm parchment underfoot, ink for the words that matter, and a single worn leather accent where the user acts. The product's core scene is two or three pages laid side by side — the original and its competing translations — so the interface behaves like a well-made reading surface that happens to have controls. Density is comfortable, never airy; every panel earns its place beside the text.\n\nThe mood is warm scholarly restraint. The reading serif carries books, chapters, and translated prose; Instrument Sans carries controls, metadata, and navigation. White is reserved for surfaces that lift off the parchment: cards, toolbars, and reading pages. Leather appears in small, deliberate doses — primary buttons, active navigation, progress fills, the brand tile — and never as a decorative wash. The result should feel quietly precise, like a translator's reference desk that has been used for years.\n\nDepth is soft paper layering. Parchment is the flat ground; white cards sit on it with a faint shadow, and shadows grow only on hover or for floating work panels. Borders do most of the structural work. The system explicitly rejects the glossy SaaS dashboard: no purple gradients, glassmorphism, generic analytics cards, or ornamental startup chrome.",
+    "keyCharacteristics": [
+      "Parchment ground, white lifted surfaces, ink text.",
+      "One leather accent for action and identity; amber only for sentence alignment.",
+      "Literary serif for books, compact sans for the tool.",
+      "8px control radius, 12px cards, 16px hero panels.",
+      "Border-first depth with restrained shadows.",
+      "Comparison-first layouts; never more than three text columns."
+    ],
+    "rules": [
+      {
+        "name": "The Parchment Ground Rule",
+        "body": "The app background is always Unbleached Parchment. Pure white is a lifted surface, never the page itself.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ledger Accent Rule",
+        "body": "Saddle Leather is spent on action, active state, progress, and identity. If leather covers more than roughly a tenth of a screen, it has become decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Amber Annotation Rule",
+        "body": "Reading Amber marks sentence alignment only. It never marks buttons, links, warnings, or general emphasis.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Books, chapter titles, and translated prose use the reading serif. Buttons, forms, navigation, and metadata use Instrument Sans. Never set a control or a UI label in the reading serif.",
+        "section": "typography"
+      },
+      {
+        "name": "The Unjustified UI Rule",
+        "body": "Justified text and automatic hyphenation belong to reader body paragraphs only. UI copy, headings, labels, and short text stay left-aligned and unhyphenated.",
+        "section": "typography"
+      },
+      {
+        "name": "The Library First Rule",
+        "body": "The full pitch and inline import panel appear only when the library is empty. Once books exist, the page leads with the library grid, inline counts, and a compact import drawer.",
+        "section": "layout"
+      },
+      {
+        "name": "The Three-Column Ceiling",
+        "body": "A comparison page holds the original plus at most two translations. Never add a fourth reading column; start a new page or a new comparison instead.",
+        "section": "layout"
+      },
+      {
+        "name": "The Viewport Reader Rule",
+        "body": "The reader never scrolls the document vertically. Pages advance in horizontal screens; the header, footer, and sidebar stay fixed.",
+        "section": "layout"
+      },
+      {
+        "name": "The Border First Rule",
+        "body": "Reach for a 1px Parchment Edge border before adding a shadow. If the border already separates the surface, the shadow is optional.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Hover Lift Rule",
+        "body": "Only interactive cards lift. Resting cards, panes, and metadata panels stay at Card Rest; nothing bobs or floats without a state change.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Soft Rectangle Rule",
+        "body": "Every surface is a soft rectangle first. Circles are functional badges, not a decorative motif.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Touch Floor Rule",
+        "body": "Primary controls are at least 44×44px on small screens, and functional text never drops below 11px. Icon-only actions always carry an accessible name.",
+        "section": "layout"
+      },
+      {
+        "name": "The Sticky Selection Rule",
+        "body": "On mobile, the selected-page count and Translate action stay pinned to the viewport bottom while a selection exists; the same summary lives in the desktop rail.",
+        "section": "layout"
+      },
+      {
+        "name": "The One Outline Rule",
+        "body": "Every page owns exactly one h1. Book-content headings are demoted beneath it — h3 in the studio under the chapter h2, h2 in the reader under the book title — so EPUB markup never competes with the page outline.",
+        "section": "typography"
+      },
+      {
+        "name": "The Legible Coverage Rule",
+        "body": "Chapter coverage is shown per translation slot with a labelled progressbar outside the row button, so screen readers announce the fraction and the bar never flattens the button name.",
+        "section": "layout"
+      }
+    ],
+    "dos": [
+      "Do keep Unbleached Parchment as the page ground and Paper White for lifted cards, toolbars, and reading pages.",
+      "Do reserve Saddle Leather for primary actions, active states, progress fills, and the brand tile.",
+      "Do set books, chapter titles, and reading prose in the reading serif, and everything operational in Instrument Sans.",
+      "Do use 8px for controls, 6px for rows, 12px for cards, and 16px for hero panels.",
+      "Do define edges with 1px Parchment Edge borders before adding shadows.",
+      "Do use Reading Amber only for aligned sentences in comparison and reader views.",
+      "Do use the mono stack only for model IDs, endpoints, and source hashes.",
+      "Do keep the reader at a 46rem single-column measure or a 1200px spread, and the comparison at three columns maximum.",
+      "Do use tabular numerals for counts, progress, and page positions.",
+      "Do keep primary touch targets at least 44×44px on small screens and functional text at least 11px.",
+      "Do keep one h1 per page and demote book-content headings beneath it.",
+      "Do label every coverage bar, keep it outside its row button, and show one track per translation slot.",
+      "Do search chapter lists by title or number once a book has more than a handful of chapters."
+    ],
+    "donts": [
+      "Don't introduce glossy SaaS gradients, glassmorphism, purple or blue brand accents, or generic analytics cards.",
+      "Don't use pure black or neutral gray text; use Oxide Ink, Soft Ink, or Muted Ink.",
+      "Don't set buttons, labels, navigation, or metadata in the reading serif.",
+      "Don't use leather as a large background wash, texture, or decorative panel fill.",
+      "Don't put a drop shadow on every card or animate resting surfaces.",
+      "Don't add a fourth reading column; the original plus two translations is the ceiling.",
+      "Don't justify UI copy, headings, or short text; justification belongs to reader paragraphs.",
+      "Don't use Reading Amber for links, warnings, buttons, or general emphasis.",
+      "Don't invent new radii, shadow levels, or accent hues when an existing token fits.",
+      "Don't nest cards inside cards; use flat panes, spacing, and rules.",
+      "Don't put progressbars inside buttons or signal coverage by color alone.",
+      "Don't introduce 10px functional text or icon-only actions without an accessible name."
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ElementType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { splitSentences } from '@/lib/alignment';
@@ -11,6 +11,11 @@ interface BlockRendererProps {
     placeholder?: string;
     locale?: string;
     sentenceHighlights?: Record<number, number[]>;
+    /**
+     * Demote content headings so they nest under the page's own h1 instead of
+     * competing with it in the document outline.
+     */
+    headingOffset?: number;
 }
 
 function renderText(
@@ -41,7 +46,7 @@ function renderText(
             parts.push(
                 <mark
                     key={`sentence-${sentence.start}`}
-                    className="bg-amber-200/80 text-inherit"
+                    className="bg-annotation-amber/80 text-inherit"
                 >
                     {sentence.text}
                 </mark>,
@@ -64,26 +69,23 @@ function BlockElement({
     block,
     locale,
     sentenceIndexes,
+    headingOffset,
 }: {
     block: RenderableBlock;
     locale?: string;
     sentenceIndexes?: number[];
+    headingOffset: number;
 }) {
     const content = renderText(block.text, sentenceIndexes, locale);
 
+    if (/^h[1-6]$/.test(block.type)) {
+        const level = Math.min(6, Number(block.type[1]) + headingOffset);
+        const Heading = `h${level}` as ElementType;
+
+        return <Heading data-block-id={block.id}>{content}</Heading>;
+    }
+
     switch (block.type) {
-        case 'h1':
-            return <h1 data-block-id={block.id}>{content}</h1>;
-        case 'h2':
-            return <h2 data-block-id={block.id}>{content}</h2>;
-        case 'h3':
-            return <h3 data-block-id={block.id}>{content}</h3>;
-        case 'h4':
-            return <h4 data-block-id={block.id}>{content}</h4>;
-        case 'h5':
-            return <h5 data-block-id={block.id}>{content}</h5>;
-        case 'h6':
-            return <h6 data-block-id={block.id}>{content}</h6>;
         case 'blockquote':
             return <blockquote data-block-id={block.id}>{content}</blockquote>;
         case 'pre':
@@ -104,6 +106,7 @@ export default function BlockRenderer({
     placeholder,
     locale,
     sentenceHighlights,
+    headingOffset = 0,
 }: BlockRendererProps) {
     const { t } = useTranslation();
 
@@ -119,6 +122,7 @@ export default function BlockRenderer({
                     block={block}
                     locale={locale}
                     sentenceIndexes={sentenceHighlights?.[block.id]}
+                    headingOffset={headingOffset}
                 />
             ))}
         </div>

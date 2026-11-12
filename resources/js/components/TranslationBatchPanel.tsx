@@ -16,12 +16,12 @@ const STATUS_KEY: Record<TranslationBatch['status'], string> = {
     cancelled: 'batch.statusCancelled',
 };
 
-const STATUS_COLOR: Record<TranslationBatch['status'], string> = {
-    queued: 'default',
-    running: 'processing',
-    completed: 'success',
-    failed: 'error',
-    cancelled: 'warning',
+const STATUS_CLASS: Record<TranslationBatch['status'], string | undefined> = {
+    queued: undefined,
+    running: 'border-leather-600/40! bg-leather-600/10! text-ink-900!',
+    completed: 'border-success-green/40! bg-success-green/10! text-ink-900!',
+    failed: 'border-danger-red/40! bg-danger-surface! text-danger-ink!',
+    cancelled: 'border-warning-gold/40! bg-warning-gold/10! text-ink-900!',
 };
 
 function progressStatus(batch: TranslationBatch) {
@@ -118,7 +118,7 @@ export default function TranslationBatchPanel() {
                                         </p>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-1">
-                                        <Tag color={STATUS_COLOR[batch.status]}>
+                                        <Tag className={STATUS_CLASS[batch.status]}>
                                             {t(STATUS_KEY[batch.status])}
                                         </Tag>
                                         {!active && (
@@ -166,7 +166,7 @@ export default function TranslationBatchPanel() {
                                 )}
 
                                 {batch.failures.length > 0 && (
-                                    <div className="mt-2 max-h-32 space-y-1 overflow-y-auto rounded-md bg-red-50 p-2 text-[11px] text-red-700">
+                                    <div className="mt-2 max-h-32 space-y-1 overflow-y-auto rounded-md bg-danger-surface p-2 text-[11px] text-danger-ink">
                                         {batch.failures.map((failure) => (
                                             <button
                                                 key={failure.item_id}
@@ -256,7 +256,7 @@ export default function TranslationBatchPanel() {
                 ]}
                 width={640}
             >
-                <p className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-red-50 p-3 font-mono text-xs text-red-700">
+                <p className="max-h-80 overflow-y-auto whitespace-pre-wrap break-words rounded-md bg-danger-surface p-3 font-mono text-xs text-danger-ink">
                     {detail?.message}
                 </p>
             </Modal>

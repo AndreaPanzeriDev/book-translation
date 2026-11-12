@@ -1,7 +1,9 @@
-import { BookOutlined, CloseOutlined } from '@ant-design/icons';
-import { Button, Tag, Tooltip } from 'antd';
+import { BookOutlined, CloseOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Empty, Input, Tag, Tooltip } from 'antd';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import ChapterRow from '@/components/ChapterRow';
 import { languageLabel } from '@/lib/languages';
 import type { BookSummary, ChapterSummary } from '@/types';
 
@@ -25,6 +27,21 @@ export default function ReaderSidebar({
     onClose,
 }: ReaderSidebarProps) {
     const { t } = useTranslation();
+    const [query, setQuery] = useState('');
+
+    const filteredChapters = useMemo(() => {
+        const needle = query.trim().toLocaleLowerCase();
+
+        if (needle === '') {
+            return chapters;
+        }
+
+        return chapters.filter(
+            (chapter) =>
+                chapter.title.toLocaleLowerCase().includes(needle) ||
+                String(chapter.position).includes(needle),
+        );
+    }, [chapters, query]);
 
     return (
         <div className="flex h-full min-h-0 flex-col bg-parchment-100/75">
@@ -48,13 +65,13 @@ export default function ReaderSidebar({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                        <h1 className="font-reading text-lg leading-snug text-ink-900">
+                        <p className="font-reading text-lg leading-snug text-ink-900">
                             {book.title}
-                        </h1>
+                        </p>
                         <p className="mt-1 truncate text-xs text-ink-500">
                             {book.author ?? t('common.authorUnknown')}
                         </p>
-                        <Tag className="mt-2" color="gold">
+                        <Tag className="mt-2 border-warning-gold/40! bg-warning-gold/10! text-ink-900!">
                             {languageLabel(book.target_language)}
                         </Tag>
                         <p className="mt-2 text-[11px] text-ink-500">
@@ -64,9 +81,8 @@ export default function ReaderSidebar({
 
                     <Tooltip title={t('reader.closeSidebar')}>
                         <Button
-                            className="-mr-2 -mt-1 shrink-0"
+                            className="-mr-2 -mt-1 h-11! w-11! shrink-0"
                             type="text"
-                            size="small"
                             icon={<CloseOutlined />}
                             onClick={onClose}
                             aria-label={t('reader.closeSidebar')}
@@ -75,68 +91,72 @@ export default function ReaderSidebar({
                 </div>
             </div>
 
-            <div className="flex items-center justify-between px-5 pb-2 pt-4">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-500">
-                    {t('reader.contents')}
-                </h2>
-                <Tag className="m-0">{chapters.length}</Tag>
+            <div className="px-5 pb-2 pt-4">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-ink-500">
+                        {t('reader.contents')}
+                    </h2>
+                    <Tag className="m-0">{chapters.length}</Tag>
+                </div>
+                <Input
+                    className="mt-3 min-h-11"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t('reader.searchChapters')}
+                    aria-label={t('reader.searchChapters')}
+                    prefix={<SearchOutlined className="text-ink-500" />}
+                    allowClear
+                />
             </div>
 
-            <nav className="min-h-0 flex-1 overflow-y-auto px-3 pb-5">
-                <div className="space-y-1">
-                    {chapters.map((chapter) => {
-                        const translated = chapterCounts[chapter.id] ?? 0;
-                        const disabled = translated === 0;
-                        const active = chapter.id === currentChapterId;
-                        const progress =
-                            chapter.pages_count > 0
-                                ? Math.min(100, (translated / chapter.pages_count) * 100)
-                                : 0;
+            <nav
+                className="min-h-0 flex-1 overflow-y-auto px-3 pb-5"
+                aria-label={t('reader.contents')}
+            >
+                {filteredChapters.length === 0 ? (
+                    <Empty
+                        className="px-3 py-10"
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description={t('reader.noChapterResults')}
+                    />
+                ) : (
+                    <div className="space-y-0.5">
+                        {filteredChapters.map((chapter) => {
+                            const translated = chapterCounts[chapter.id] ?? 0;
+                            const active = chapter.id === currentChapterId;
 
-                        return (
-                            <button
-                                key={chapter.id}
-                                type="button"
-                                disabled={disabled}
-                                aria-current={active ? 'page' : undefined}
-                                onClick={() => onSelectChapter(chapter.id)}
-                                className={`w-full rounded-md px-3 py-2 text-left transition ${
-                                    active
-                                        ? 'bg-leather-100 text-leather-700'
-                                        : disabled
-                                          ? 'cursor-not-allowed text-ink-500/50'
-                                          : 'text-ink-700 hover:bg-parchment-100'
-                                }`}
-                            >
-                                <span className="flex items-baseline justify-between gap-2">
-                                    <span className="min-w-0 truncate text-sm">
-                                        {chapter.title}
-                                    </span>
-                                    <span className="shrink-0 text-[10px] tabular-nums text-ink-500">
-                                        {translated > 0
+                            return (
+                                <ChapterRow
+                                    key={chapter.id}
+                                    position={chapter.position}
+                                    title={chapter.title}
+                                    active={active}
+                                    disabled={translated === 0}
+                                    meta={
+                                        translated > 0
                                             ? t('reader.chapterCount', {
                                                   translated,
                                                   total: chapter.pages_count,
                                               })
-                                            : t('reader.noTranslatedChapter')}
-                                    </span>
-                                </span>
-                                <span
-                                    className={`mt-1.5 block h-1 overflow-hidden rounded-full ${
-                                        active ? 'bg-white/70' : 'bg-parchment-200'
-                                    }`}
-                                >
-                                    <span
-                                        className={`block h-full rounded-full ${
-                                            active ? 'bg-leather-600' : 'bg-leather-600/70'
-                                        }`}
-                                        style={{ width: `${progress}%` }}
-                                    />
-                                </span>
-                            </button>
-                        );
-                    })}
-                </div>
+                                            : t('reader.noTranslatedChapter')
+                                    }
+                                    tracks={[
+                                        {
+                                            key: 'translated',
+                                            label: t('reader.coverageAria', {
+                                                translated,
+                                                total: chapter.pages_count,
+                                            }),
+                                            translated,
+                                            total: chapter.pages_count,
+                                        },
+                                    ]}
+                                    onSelect={() => onSelectChapter(chapter.id)}
+                                />
+                            );
+                        })}
+                    </div>
+                )}
             </nav>
         </div>
     );

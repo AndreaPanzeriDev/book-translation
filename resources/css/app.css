@@ -18,12 +18,21 @@
     --color-parchment-100: #f5efe5;
     --color-parchment-200: #e9dfd0;
     --color-parchment-300: #d8c6ad;
+    --color-surface-white: #ffffff;
     --color-ink-900: #2b2520;
     --color-ink-700: #4a4038;
     --color-ink-500: #746a60;
     --color-leather-700: #6f4e37;
     --color-leather-600: #8b5e3c;
     --color-leather-100: #f2e7dc;
+    --color-annotation-amber: #fee685;
+    --color-success-green: #4f7a5b;
+    --color-warning-gold: #c28a2e;
+    --color-danger-red: #a94442;
+    --color-danger-surface: #fef2f2;
+    --color-danger-ink: #b91c1c;
+    --color-placeholder-ink: #746a60;
+    --color-scrollbar-thumb: #cfc3b4;
 }
 
 html {
@@ -115,7 +124,7 @@ body {
 }
 
 .reading-pane .block-placeholder {
-    color: #aaa098;
+    color: var(--color-placeholder-ink);
     font-style: italic;
 }
 
@@ -264,9 +273,19 @@ body {
     }
 }
 
+.ant-drawer-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin-inline-end: 0;
+    margin-inline-start: -0.5rem;
+}
+
 * {
     scrollbar-width: thin;
-    scrollbar-color: #cfc3b4 transparent;
+    scrollbar-color: var(--color-scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -275,7 +294,7 @@ body {
 }
 
 *::-webkit-scrollbar-thumb {
-    background: #cfc3b4;
+    background: var(--color-scrollbar-thumb);
     border-radius: 999px;
 }
 

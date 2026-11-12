@@ -8,6 +8,7 @@ interface ReaderCanvasProps {
     columns: 1 | 2;
     screenIndex: number;
     locale?: string;
+    chapterPositions: Record<number, number>;
     onScreenCountChange: (count: number) => void;
 }
 
@@ -26,6 +27,7 @@ export default function ReaderCanvas({
     columns,
     screenIndex,
     locale,
+    chapterPositions,
     onScreenCountChange,
 }: ReaderCanvasProps) {
     const flowRef = useRef<HTMLDivElement>(null);
@@ -108,6 +110,7 @@ export default function ReaderCanvas({
                     <ReaderPageView
                         page={page}
                         locale={locale}
+                        chapterPosition={chapterPositions[page.chapter_id]}
                         spread={columns === 2}
                     />
                 </div>

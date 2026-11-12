@@ -34,7 +34,6 @@ export default function LanguageSwitcher() {
 
     return (
         <Segmented
-            size="small"
             value={current}
             disabled={saving}
             onChange={(value) => void change(value)}

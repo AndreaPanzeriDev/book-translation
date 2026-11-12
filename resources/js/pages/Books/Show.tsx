@@ -5,16 +5,32 @@ import {
     OrderedListOutlined,
     ReadOutlined,
     RightOutlined,
+    SearchOutlined,
     ThunderboltOutlined,
     TranslationOutlined,
 } from '@ant-design/icons';
-import { Link, router } from '@inertiajs/react';
-import { Alert, App, AutoComplete, Button, Checkbox, Divider, Empty, Select, Spin, Switch, Tag, Tooltip } from 'antd';
+import { Head, Link, router } from '@inertiajs/react';
+import {
+    Alert,
+    App,
+    AutoComplete,
+    Button,
+    Checkbox,
+    Drawer,
+    Empty,
+    Input,
+    Select,
+    Spin,
+    Switch,
+    Tag,
+    Tooltip,
+} from 'antd';
 import axios from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import BlockRenderer from '@/components/BlockRenderer';
+import ChapterRow, { type ChapterTrack } from '@/components/ChapterRow';
 import ExportBookModal from '@/components/ExportBookModal';
 import { useTranslationBatch } from '@/contexts/TranslationBatchProvider';
 import AppLayout from '@/layouts/AppLayout';
@@ -181,7 +197,6 @@ function RequestModeTag({ mode, limit }: { mode: RequestMode; limit?: number }) 
 
     return (
         <Tag
-            color={parallel ? 'blue' : 'default'}
             icon={parallel ? <ThunderboltOutlined /> : <OrderedListOutlined />}
         >
             {parallel
@@ -219,7 +234,7 @@ function SlotPicker({
     }
 
     return (
-        <div className="rounded-lg border border-parchment-200 bg-white p-3">
+        <div className="min-w-0">
             <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">{label}</span>
                 {account && (
@@ -236,6 +251,7 @@ function SlotPicker({
                 <Select
                     value={slot.accountId ?? undefined}
                     placeholder={t('studio.accountPlaceholder')}
+                    aria-label={t('studio.accountSelectAria', { slot: label })}
                     options={accounts.map((item) => ({
                         value: item.id,
                         label: item.name,
@@ -250,6 +266,7 @@ function SlotPicker({
                     value={slot.model}
                     options={modelOptions}
                     placeholder={t('studio.modelPlaceholder')}
+                    aria-label={t('studio.modelSelectAria', { slot: label })}
                     onChange={(value: string) => onChange({ ...slot, model: value })}
                     filterOption={(input, option) =>
                         String(option?.value ?? '')
@@ -259,7 +276,7 @@ function SlotPicker({
                 />
             </div>
             {account && account.models.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-ink-500">
+                <p className="mt-1.5 text-xs text-ink-500">
                     {t('studio.noModels')}
                 </p>
             )}
@@ -282,7 +299,9 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(null);
     const [pages, setPages] = useState<Record<number, PageDetail>>({});
     const [translationCache, setTranslationCache] = useState<Record<number, Translation[]>>({});
-    const [chapterCoverage, setChapterCoverage] = useState<Record<number, number>>({});
+    const [chapterCoverageBySlot, setChapterCoverageBySlot] = useState<
+        Partial<Record<SlotKey, Record<number, number>>>
+    >({});
     const [missingPagesBySlot, setMissingPagesBySlot] = useState<
         Partial<Record<SlotKey, Set<number>>>
     >({});
@@ -290,6 +309,8 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
     const [coverageLoading, setCoverageLoading] = useState(false);
     const [loadingPages, setLoadingPages] = useState(false);
     const [secondColumn, setSecondColumn] = useState(false);
+    const [contentsOpen, setContentsOpen] = useState(false);
+    const [chapterQuery, setChapterQuery] = useState('');
     const [slotA, setSlotA] = useState<Slot>(
         () => slotFromHistory(lastUsedSlots.a, accounts) ?? defaultSlot(accounts, lastUsedModels),
     );
@@ -381,9 +402,35 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
         [secondColumn, slotA, slotB],
     );
 
+    const readableSlot = useMemo(() => {
+        if (!coverageReady) {
+            return activeSlots[0]?.slot ?? slotA;
+        }
+
+        const readable = activeSlots.find(({ key }) => {
+            if (activeChapterId !== null) {
+                return (chapterCoverageBySlot[key]?.[activeChapterId] ?? 0) > 0;
+            }
+
+            const missing = missingPagesBySlot[key];
+
+            return missing !== undefined && missing.size < book.pages_count;
+        });
+
+        return readable?.slot ?? activeSlots[0]?.slot ?? slotA;
+    }, [
+        activeChapterId,
+        activeSlots,
+        book.pages_count,
+        chapterCoverageBySlot,
+        coverageReady,
+        missingPagesBySlot,
+        slotA,
+    ]);
+
     const readerHref = readerUrl(book.id, {
-        account_id: slotA.accountId ?? undefined,
-        model: slotA.model.trim() || undefined,
+        account_id: readableSlot.accountId ?? undefined,
+        model: readableSlot.model.trim() || undefined,
         target_language: targetLanguage,
         chapter: activeChapterId ?? undefined,
         scope: 'chapter',
@@ -495,7 +542,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
 
         if (readySlots.length === 0) {
             coverageSignatureRef.current = null;
-            setChapterCoverage({});
+            setChapterCoverageBySlot({});
             setMissingPagesBySlot({});
             setCoverageReady(false);
             setCoverageLoading(false);
@@ -505,7 +552,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
 
         if (coverageSignatureRef.current !== coverageSignature) {
             coverageSignatureRef.current = coverageSignature;
-            setChapterCoverage({});
+            setChapterCoverageBySlot({});
             setMissingPagesBySlot({});
             setCoverageReady(false);
             setCoverageLoading(true);
@@ -538,27 +585,22 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                     }
 
                     const nextMissing: Partial<Record<SlotKey, Set<number>>> = {};
+                    const nextCoverage: Partial<Record<SlotKey, Record<number, number>>> = {};
 
                     for (const { key, data } of results) {
                         nextMissing[key] = new Set(data.missing_page_ids);
+
+                        const chapters: Record<number, number> = {};
+
+                        for (const row of data.coverage) {
+                            chapters[row.chapter_id] = row.translated;
+                        }
+
+                        nextCoverage[key] = chapters;
                     }
 
                     setMissingPagesBySlot(nextMissing);
-
-                    const slotACoverage = results.find(({ key }) => key === 'a')?.data.coverage;
-
-                    if (slotACoverage) {
-                        const next: Record<number, number> = {};
-
-                        for (const row of slotACoverage) {
-                            next[row.chapter_id] = row.translated;
-                        }
-
-                        setChapterCoverage(next);
-                    } else {
-                        setChapterCoverage({});
-                    }
-
+                    setChapterCoverageBySlot(nextCoverage);
                     setCoverageReady(readySlots.length === activeSlots.length);
                     setCoverageLoading(false);
                 })
@@ -883,30 +925,108 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
         }
     };
 
-    const coverageByChapter = useMemo(() => {
-        const coverage: Record<number, { translated: number; total: number }> = {};
+    const filteredChapters = useMemo(() => {
+        const needle = chapterQuery.trim().toLocaleLowerCase();
 
-        for (const chapter of chapters) {
-            coverage[chapter.id] = {
-                translated: chapterCoverage[chapter.id] ?? 0,
-                total: chapter.pages_count,
-            };
+        if (needle === '') {
+            return chapters;
         }
 
-        return coverage;
-    }, [chapters, chapterCoverage]);
+        return chapters.filter(
+            (chapter) =>
+                chapter.title.toLocaleLowerCase().includes(needle) ||
+                String(chapter.position).includes(needle),
+        );
+    }, [chapterQuery, chapters]);
+
+    const chapterTracks = (chapter: ChapterSummary): ChapterTrack[] => {
+        if (!coverageReady) {
+            return [];
+        }
+
+        return activeSlots.flatMap(({ key }) => {
+            const translated = chapterCoverageBySlot[key]?.[chapter.id];
+
+            if (translated === undefined) {
+                return [];
+            }
+
+            return [
+                {
+                    key,
+                    label: t('studio.coverageTrack', {
+                        slot: key === 'a' ? '1' : '2',
+                        translated,
+                        total: chapter.pages_count,
+                    }),
+                    translated,
+                    total: chapter.pages_count,
+                    tone: key === 'b' ? ('secondary' as const) : ('primary' as const),
+                },
+            ];
+        });
+    };
+
+    const selectChapter = (chapterId: number) => {
+        setActiveChapterId(chapterId);
+        setContentsOpen(false);
+    };
+
+    const chapterRows = filteredChapters.map((chapter) => (
+        <ChapterRow
+            key={chapter.id}
+            position={chapter.position}
+            title={chapter.title}
+            active={chapter.id === activeChapterId}
+            meta={t('common.pages', { count: chapter.pages_count })}
+            tracks={chapterTracks(chapter)}
+            onSelect={() => selectChapter(chapter.id)}
+        />
+    ));
+
+    const selectionControls = (
+        <div className="grid gap-2">
+            <Button
+                className="min-h-11"
+                onClick={toggleChapter}
+                disabled={chapterPages.length === 0}
+            >
+                {chapterFullySelected
+                    ? t('studio.deselectChapter')
+                    : t('studio.selectChapter')}
+            </Button>
+            <Button
+                className="min-h-11"
+                onClick={() => setSelected(new Set(pageIndex.map((page) => page.id)))}
+            >
+                {t('studio.selectAll', { count: pageIndex.length })}
+            </Button>
+            {selected.size > 0 && (
+                <Button
+                    className="min-h-11"
+                    type="text"
+                    danger
+                    onClick={() => setSelected(new Set())}
+                >
+                    {t('studio.clearSelection')}
+                </Button>
+            )}
+        </div>
+    );
 
     return (
         <AppLayout>
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-                <div className="flex min-w-0 items-start gap-3">
-                    <Button icon={<ArrowLeftOutlined />} onClick={() => router.visit('/')} aria-label={t('studio.backAria')} />
+            <Head title={t('studio.documentTitle', { title: book.title })} />
+
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+                <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <Button className="h-11! w-11! shrink-0" icon={<ArrowLeftOutlined />} onClick={() => router.visit('/')} aria-label={t('studio.backAria')} />
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                             <h1 className="truncate font-reading text-2xl text-ink-900 md:text-3xl">
                                 {book.title}
                             </h1>
-                            <Tag color="gold">
+                            <Tag className="border-warning-gold/40! bg-warning-gold/10! text-ink-900!">
                                 {languageLabel(book.language)} → {languageLabel(targetLanguage)}
                             </Tag>
                         </div>
@@ -932,11 +1052,13 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                         onChange={updateTargetLanguage}
                         loading={savingTargetLanguage}
                         disabled={translationBusy}
+                        aria-label={t('studio.targetLanguage')}
                         style={{ width: 150 }}
                         showSearch
                         optionFilterProp="label"
                     />
                     <Button
+                        className="max-lg:min-h-11"
                         icon={<ReadOutlined />}
                         onClick={() => router.visit(readerHref)}
                         aria-label={t('reader.readBookAria')}
@@ -944,6 +1066,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                         {t('reader.readBook')}
                     </Button>
                     <Button
+                        className="max-lg:min-h-11"
                         icon={<DownloadOutlined />}
                         onClick={() => setExportOpen(true)}
                         disabled={!hasExportSlot}
@@ -968,79 +1091,79 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                 />
             )}
 
-            <div className="grid gap-6 lg:grid-cols-[290px_minmax(0,1fr)]">
-                <aside className="space-y-4">
+            <div className="mb-4 flex items-center gap-2 rounded-xl border border-parchment-200 bg-white p-3 shadow-sm lg:hidden">
+                <Button
+                    icon={<OrderedListOutlined />}
+                    onClick={() => setContentsOpen(true)}
+                    aria-label={t('studio.openContents')}
+                    className="min-h-11 shrink-0"
+                >
+                    {t('studio.contents')}
+                </Button>
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] text-ink-500 lg:uppercase lg:tracking-wide">
+                        {t('studio.chapterMeta', {
+                            position: activeChapter?.position ?? '—',
+                            count: activeChapter?.pages_count ?? 0,
+                        })}
+                    </p>
+                    <h2 className="truncate text-sm font-semibold text-ink-900">
+                        {activeChapter?.title ?? t('studio.chapterPlaceholder')}
+                    </h2>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                        className="h-11! w-11!"
+                        icon={<LeftOutlined />}
+                        onClick={() => previousChapter && selectChapter(previousChapter.id)}
+                        disabled={!previousChapter}
+                        aria-label={t('studio.previousChapterAria')}
+                    />
+                    <Button
+                        className="h-11! w-11!"
+                        icon={<RightOutlined />}
+                        onClick={() => nextChapter && selectChapter(nextChapter.id)}
+                        disabled={!nextChapter}
+                        aria-label={t('studio.nextChapterAria')}
+                    />
+                </div>
+            </div>
+
+            <div className={`grid gap-6 lg:grid-cols-[290px_minmax(0,1fr)] ${selected.size > 0 ? 'pb-24' : ''} lg:pb-0`}>
+                <aside className="hidden space-y-4 lg:block">
                     <div className="rounded-xl border border-parchment-200 bg-white p-3 shadow-sm">
-                        <div className="mb-2 flex items-center justify-between">
+                        <div className="mb-2 flex items-center justify-between gap-2">
                             <h2 className="text-sm font-semibold text-ink-900">
                                 {t('studio.chaptersTitle')}
                             </h2>
-                            <Tag>{chapters.length}</Tag>
+                            <span className="flex items-center gap-2">
+                                {coverageLoading && <Spin size="small" />}
+                                <Tag>{chapters.length}</Tag>
+                            </span>
                         </div>
+                        <Input
+                            className="mb-2 min-h-11"
+                            value={chapterQuery}
+                            onChange={(event) => setChapterQuery(event.target.value)}
+                            placeholder={t('studio.searchChapters')}
+                            aria-label={t('studio.searchChapters')}
+                            prefix={<SearchOutlined className="text-ink-500" />}
+                            allowClear
+                        />
                         <div className="max-h-[52vh] space-y-0.5 overflow-y-auto pr-1">
-                            {chapters.map((chapter) => {
-                                const active = chapter.id === activeChapterId;
-                                const coverage = coverageByChapter[chapter.id];
-
-                                return (
-                                    <button
-                                        key={chapter.id}
-                                        type="button"
-                                        onClick={() => setActiveChapterId(chapter.id)}
-                                        className={`w-full rounded-md px-2 py-1.5 text-left transition ${
-                                            active
-                                                ? 'bg-leather-100 text-leather-700'
-                                                : 'text-ink-700 hover:bg-parchment-100'
-                                        }`}
-                                    >
-                                        <span className="flex items-center gap-2">
-                                            <span
-                                                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] ${
-                                                    active
-                                                        ? 'bg-leather-600 text-white'
-                                                        : 'bg-parchment-200 text-ink-700'
-                                                }`}
-                                            >
-                                                {chapter.position}
-                                            </span>
-                                            <span className="min-w-0 flex-1 truncate text-sm">
-                                                {chapter.title}
-                                            </span>
-                                            <span className="text-[11px] text-ink-500">
-                                                {chapter.pages_count}
-                                            </span>
-                                        </span>
-                                        {coverage && (
-                                            <span className="ml-8 mt-1 block h-1 overflow-hidden rounded-full bg-parchment-200">
-                                                <span
-                                                    className="block h-full rounded-full bg-leather-600/80"
-                                                    style={{
-                                                        width: `${coverage.total === 0 ? 0 : (coverage.translated / coverage.total) * 100}%`,
-                                                    }}
-                                                />
-                                            </span>
-                                        )}
-                                    </button>
-                                );
-                            })}
+                            {chapterRows.length === 0 ? (
+                                <Empty
+                                    className="py-8"
+                                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                    description={t('studio.noChapterResults')}
+                                />
+                            ) : (
+                                chapterRows
+                            )}
                         </div>
 
-                        <Divider className="my-2" />
-
-                        <div className="grid gap-2">
-                            <Button size="small" onClick={toggleChapter} disabled={chapterPages.length === 0}>
-                                {chapterFullySelected
-                                    ? t('studio.deselectChapter')
-                                    : t('studio.selectChapter')}
-                            </Button>
-                            <Button size="small" onClick={() => setSelected(new Set(pageIndex.map((page) => page.id)))}>
-                                {t('studio.selectAll', { count: pageIndex.length })}
-                            </Button>
-                            {selected.size > 0 && (
-                                <Button size="small" type="text" danger onClick={() => setSelected(new Set())}>
-                                    {t('studio.clearSelection')}
-                                </Button>
-                            )}
+                        <div className="mt-2 border-t border-parchment-200 pt-2">
+                            {selectionControls}
                         </div>
                     </div>
 
@@ -1073,7 +1196,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                             </p>
                         )}
                         {selectionAlreadyTranslated && (
-                            <p className="mt-1 text-[11px] leading-snug text-ink-500">
+                            <p className="mt-1 text-xs leading-snug text-ink-500">
                                 {t('studio.selectionAlreadyTranslated')}
                             </p>
                         )}
@@ -1095,7 +1218,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                         >
                             {translationBusy ? t('studio.translating') : t('studio.translateSelection')}
                         </Button>
-                        <p className="mt-2 text-[11px] leading-snug text-ink-500">
+                        <p className="mt-2 text-xs leading-snug text-ink-500">
                             {requestModeSummary} {t('studio.cacheHint')}
                         </p>
                     </div>
@@ -1104,12 +1227,12 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                 <section className="min-w-0">
                     <div className="mb-4 rounded-xl border border-parchment-200 bg-white p-4 shadow-sm">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex min-w-0 items-center gap-2">
+                            <div className="hidden min-w-0 items-center gap-2 lg:flex">
                                 {previousChapter && (
                                     <Button
-                                        size="small"
+                                        className="h-11! w-11!"
                                         icon={<LeftOutlined />}
-                                        onClick={() => setActiveChapterId(previousChapter.id)}
+                                        onClick={() => selectChapter(previousChapter.id)}
                                         aria-label={t('studio.previousChapterAria')}
                                     />
                                 )}
@@ -1125,19 +1248,23 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                 </div>
                                 {nextChapter && (
                                     <Button
-                                        size="small"
+                                        className="h-11! w-11!"
                                         icon={<RightOutlined />}
-                                        onClick={() => setActiveChapterId(nextChapter.id)}
+                                        onClick={() => selectChapter(nextChapter.id)}
                                         aria-label={t('studio.nextChapterAria')}
                                     />
                                 )}
                             </div>
 
                             <div className="flex items-center gap-3">
-                                <span className="text-xs text-ink-500">
+                                <span id="compare-toggle-label" className="text-xs text-ink-500">
                                     {t('studio.compareToggle')}
                                 </span>
-                                <Switch checked={secondColumn} onChange={toggleSecondColumn} />
+                                <Switch
+                                    checked={secondColumn}
+                                    onChange={toggleSecondColumn}
+                                    aria-labelledby="compare-toggle-label"
+                                />
                             </div>
                         </div>
 
@@ -1201,28 +1328,35 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                     >
                                         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-parchment-200 bg-parchment-50/60 px-4 py-2.5">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <Checkbox
-                                                    checked={selected.has(info.id)}
-                                                    onChange={(event) => {
-                                                        if (!event.nativeEvent.shiftKey) {
-                                                            togglePage(info.id, index);
-                                                        }
-                                                    }}
-                                                    onClick={(event) => {
-                                                        if (event.shiftKey) {
-                                                            event.preventDefault();
-                                                            selectRange(index);
-                                                        }
-                                                    }}
-                                                />
+                                                <span className="-ml-2.5 flex h-11 w-11 shrink-0 items-center justify-center">
+                                                    <Checkbox
+                                                        className="h-11! w-11! items-center justify-center"
+                                                        checked={selected.has(info.id)}
+                                                        aria-label={t('studio.selectPageAria', {
+                                                            position: info.position,
+                                                        })}
+                                                        onChange={(event) => {
+                                                            if (!event.nativeEvent.shiftKey) {
+                                                                togglePage(info.id, index);
+                                                            }
+                                                        }}
+                                                        onClick={(event) => {
+                                                            if (event.shiftKey) {
+                                                                event.preventDefault();
+                                                                selectRange(index);
+                                                            }
+                                                        }}
+                                                    />
+                                                </span>
                                                 <span className="text-sm font-medium text-ink-900">
                                                     {t('studio.pageLabel', {
                                                         position: info.position,
                                                     })}
                                                 </span>
                                                 <Tag>
-                                                    {t('studio.chapterTag', {
-                                                        position: info.chapter_position,
+                                                    {t('studio.chapterPageTag', {
+                                                        chapter: activeChapter?.position ?? '—',
+                                                        page: info.chapter_position,
                                                     })}
                                                 </Tag>
                                                 <span className="text-xs text-ink-500">
@@ -1230,7 +1364,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                         count: info.char_count,
                                                     })}
                                                 </span>
-                                                <span className="hidden text-[11px] text-ink-500 md:inline">
+                                                <span className="hidden text-xs text-ink-500 md:inline">
                                                     {t('studio.shiftHint')}
                                                 </span>
                                             </div>
@@ -1247,6 +1381,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                         })}
                                                     >
                                                         <Button
+                                                            className="max-lg:min-h-11 max-lg:min-w-11"
                                                             size="small"
                                                             icon={<ReadOutlined />}
                                                             onClick={() =>
@@ -1258,6 +1393,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                     </Tooltip>
                                                 )}
                                                 <Button
+                                                    className="max-lg:min-h-11 max-lg:min-w-11"
                                                     size="small"
                                                     icon={<ThunderboltOutlined />}
                                                     onClick={() => translatePage(info.id)}
@@ -1281,9 +1417,10 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                 }
                                             >
                                                 <div
-                                                    className="rounded-lg bg-parchment-50/70 p-4"
+                                                    className="bg-parchment-50/70 p-4"
                                                     data-source-pane
                                                     data-page-id={info.id}
+                                                    lang={book.language ?? undefined}
                                                 >
                                                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-parchment-200 pb-2">
                                                         <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">
@@ -1293,20 +1430,23 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                                 ),
                                                             })}
                                                         </span>
-                                                        <span className="text-[11px] text-ink-500">
-                                                            {page.source_hash.slice(0, 8)}
-                                                        </span>
+                                                        <Tooltip title={t('studio.sourceHash')}>
+                                                            <span className="text-[11px] text-ink-500">
+                                                                {page.source_hash.slice(0, 8)}
+                                                            </span>
+                                                        </Tooltip>
                                                     </div>
                                                     {activeSlots.some(({ slot }) =>
                                                         findTranslation(info.id, slot),
                                                     ) && (
-                                                        <p className="mb-2 text-[11px] text-ink-500">
+                                                        <p className="mb-2 text-xs text-ink-500">
                                                             {t('studio.selectionHint')}
                                                         </p>
                                                     )}
                                                     <BlockRenderer
                                                         blocks={page.blocks}
                                                         locale={book.language ?? undefined}
+                                                        headingOffset={2}
                                                     />
                                                 </div>
 
@@ -1331,7 +1471,8 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                     return (
                                                         <div
                                                             key={key}
-                                                            className="rounded-lg border border-parchment-200 p-4"
+                                                            className="p-4"
+                                                            lang={targetLanguage}
                                                         >
                                                             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-parchment-200 pb-2">
                                                                 <span className="text-xs font-semibold uppercase tracking-wide text-ink-500">
@@ -1349,7 +1490,10 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                                     </Tag>
                                                                     {translation && (
                                                                         <Tooltip title={t('studio.cachedTooltip')}>
-                                                                            <Tag color="green">
+                                                                            <Tag
+                                                                                className="border-success-green/40! bg-success-green/10! text-ink-900!"
+                                                                                tabIndex={0}
+                                                                            >
                                                                                 {t('studio.cacheTag')}
                                                                             </Tag>
                                                                         </Tooltip>
@@ -1363,9 +1507,10 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                                         blocks={mapTranslatedBlocks(page, translation)}
                                                                         locale={targetLanguage}
                                                                         sentenceHighlights={highlights}
+                                                                        headingOffset={2}
                                                                     />
                                                                     <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-parchment-200 pt-2 text-[11px] text-ink-500">
-                                                                        <Tag className="font-mono text-[10px]">
+                                                                        <Tag className="font-mono text-[11px]">
                                                                             {translation.model}
                                                                         </Tag>
                                                                         {translation.total_tokens != null && (
@@ -1395,6 +1540,7 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                                                                             : t('studio.emptyTranslationNotReady')}
                                                                     </p>
                                                                     <Button
+                                                                        className="max-lg:min-h-11"
                                                                         size="small"
                                                                         onClick={() => translatePage(info.id)}
                                                                         disabled={!ready || translationBusy}
@@ -1415,6 +1561,92 @@ export default function Show({ book, chapters, pageIndex, accounts, lastUsedSlot
                     )}
                 </section>
             </div>
+
+            <Drawer
+                title={t('studio.chaptersTitle')}
+                open={contentsOpen}
+                onClose={() => setContentsOpen(false)}
+                placement="left"
+                size={340}
+                styles={{ body: { padding: 0 } }}
+            >
+                <div className="flex h-full min-h-0 flex-col">
+                    <div className="border-b border-parchment-200 p-4">
+                        <Input
+                            className="min-h-11"
+                            value={chapterQuery}
+                            onChange={(event) => setChapterQuery(event.target.value)}
+                            placeholder={t('studio.searchChapters')}
+                            aria-label={t('studio.searchChapters')}
+                            prefix={<SearchOutlined className="text-ink-500" />}
+                            allowClear
+                        />
+                        <div className="mt-3">{selectionControls}</div>
+                    </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                        {chapterRows.length === 0 ? (
+                            <Empty
+                                className="py-8"
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={t('studio.noChapterResults')}
+                            />
+                        ) : (
+                            <div className="space-y-0.5">{chapterRows}</div>
+                        )}
+                    </div>
+                </div>
+            </Drawer>
+
+            {selected.size > 0 && (
+                <div className="fixed inset-x-0 bottom-0 z-20 border-t border-parchment-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur lg:hidden">
+                    <div className="mx-auto flex max-w-[1500px] items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-ink-900">
+                                {coveragePending
+                                    ? '—'
+                                    : selectionAlreadyTranslated
+                                      ? t('studio.selectionSummary', {
+                                            count: selected.size,
+                                        })
+                                      : showRemaining
+                                        ? t('studio.selectionRemaining', {
+                                              count: pagesToTranslate.length,
+                                          })
+                                        : t('studio.selectionSummary', {
+                                              count: selected.size,
+                                          })}
+                            </p>
+                            <p className="truncate text-xs text-ink-500">
+                                {selectionAlreadyTranslated
+                                    ? t('studio.selectionAlreadyTranslated')
+                                    : coveragePending
+                                      ? t('studio.calculatingSelection')
+                                      : t('studio.charsToTranslate', {
+                                            count: charsToTranslate,
+                                            value: charsToTranslate.toLocaleString(currentLocale()),
+                                        })}
+                            </p>
+                        </div>
+                        <Button
+                            type="primary"
+                            size="large"
+                            className="min-h-11 shrink-0"
+                            icon={<TranslationOutlined />}
+                            onClick={startTranslation}
+                            disabled={
+                                !slotsReady ||
+                                translationBusy ||
+                                selectionAlreadyTranslated
+                            }
+                            loading={translationBusy}
+                        >
+                            {translationBusy
+                                ? t('studio.translating')
+                                : t('studio.translateSelection')}
+                        </Button>
+                    </div>
+                </div>
+            )}
 
             <ExportBookModal
                 open={exportOpen}

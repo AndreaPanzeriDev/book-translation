@@ -6,7 +6,7 @@ import {
     MenuOutlined,
     RightOutlined,
 } from '@ant-design/icons';
-import { router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { Alert, Button, Drawer, Empty, Select, Spin, Tooltip } from 'antd';
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -93,6 +93,10 @@ function versionParams(version: ReaderVersion): VersionParams {
     };
 }
 
+function shortModel(model: string): string {
+    return model.includes('/') ? model.slice(model.lastIndexOf('/') + 1) : model;
+}
+
 export default function Reader({
     book,
     chapters,
@@ -148,6 +152,19 @@ export default function Reader({
         return counts;
     }, [index.chapters]);
 
+    const chapterPositions = useMemo(() => {
+        const positions: Record<number, number> = {};
+
+        for (const chapter of chapters) {
+            positions[chapter.id] = chapter.position;
+        }
+
+        return positions;
+    }, [chapters]);
+
+    const versionFor = (key: unknown) =>
+        versions.find((version) => versionKey(version) === key) ?? null;
+
     const versionOptions = useMemo(
         () =>
             versions.map((version) => ({
@@ -158,6 +175,51 @@ export default function Reader({
             })),
         [t, versions],
     );
+
+    const renderVersionLabel = (key: unknown) => {
+        const version = versionFor(key);
+
+        if (!version) {
+            return null;
+        }
+
+        return (
+            <span className="flex min-w-0 flex-col leading-tight">
+                <span className="truncate text-[11px] text-ink-500">
+                    {version.account_name} · {languageLabel(version.target_language)}
+                    {!version.account_active && ` (${t('reader.inactiveAccount')})`}
+                </span>
+                <span className="truncate text-[11px] font-medium text-ink-900">
+                    {shortModel(version.model)}
+                </span>
+            </span>
+        );
+    };
+
+    const renderVersionOption = (key: unknown) => {
+        const version = versionFor(key);
+
+        if (!version) {
+            return null;
+        }
+
+        return (
+            <span className="flex min-w-0 items-start justify-between gap-3">
+                <span className="min-w-0">
+                    <span className="block truncate text-[11px] text-ink-500">
+                        {version.account_name} · {languageLabel(version.target_language)}
+                        {!version.account_active && ` (${t('reader.inactiveAccount')})`}
+                    </span>
+                    <span className="mt-0.5 block break-all font-mono text-[11px] text-ink-900">
+                        {version.model}
+                    </span>
+                </span>
+                <span className="shrink-0 text-[11px] tabular-nums text-ink-500">
+                    {t('reader.translatedPages', { count: version.pages_count })}
+                </span>
+            </span>
+        );
+    };
 
     const spreads = useMemo(() => buildSpreads(index.pages), [index.pages]);
 
@@ -238,6 +300,12 @@ export default function Reader({
 
     const spreadUnavailable = !wideScreen;
     const currentScreen = screenCount > 0 ? Math.min(screenIndex, screenCount - 1) + 1 : 0;
+    const documentTitle = currentPage
+        ? t('reader.documentTitle', {
+              title: book.title,
+              page: currentPage.position,
+          })
+        : t('reader.documentTitleBook', { title: book.title });
 
     const resetScreen = useCallback(() => {
         pendingLastScreen.current = false;
@@ -524,7 +592,7 @@ export default function Reader({
         <div className="flex shrink-0 items-center gap-1">
             <Tooltip title={t('reader.layoutSingle')}>
                 <Button
-                    size="small"
+                    className="h-11! w-11!"
                     type={activeLayout === 'single' ? 'primary' : 'text'}
                     icon={<AlignLeftOutlined />}
                     onClick={() => chooseLayout('single')}
@@ -541,7 +609,7 @@ export default function Reader({
             >
                 <span>
                     <Button
-                        size="small"
+                        className="h-11! w-11!"
                         type={activeLayout === 'spread' ? 'primary' : 'text'}
                         icon={<BookOutlined />}
                         onClick={() => chooseLayout('spread')}
@@ -556,10 +624,13 @@ export default function Reader({
 
     return (
         <div className="reader-shell flex h-dvh flex-col overflow-hidden bg-parchment-50 text-ink-900">
+            <Head title={documentTitle} />
+
             <header className="shrink-0 border-b border-parchment-200 bg-white/90 backdrop-blur">
                 <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
                     <Tooltip title={t('reader.backAria')}>
                         <Button
+                            className="h-11! w-11! shrink-0"
                             type="text"
                             icon={<ArrowLeftOutlined />}
                             onClick={() => router.visit(`/books/${book.id}`)}
@@ -570,6 +641,7 @@ export default function Reader({
                     {!sidebarOpen && (
                         <Tooltip title={t('reader.openSidebar')}>
                             <Button
+                                className="h-11! w-11! shrink-0"
                                 type="text"
                                 icon={<MenuOutlined />}
                                 onClick={openSidebar}
@@ -578,17 +650,17 @@ export default function Reader({
                         </Tooltip>
                     )}
 
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 max-sm:sr-only">
                         <h1 className="truncate font-reading text-base leading-tight text-ink-900 sm:text-lg">
                             {book.title}
                         </h1>
-                        <p className="truncate text-[11px] text-ink-500">
+                        <p className="truncate text-xs text-ink-700">
                             {book.author ?? t('common.authorUnknown')}
                         </p>
                     </div>
 
                     <Select
-                        className="w-[150px] min-w-[120px] sm:w-[280px]"
+                        className="min-w-0 flex-1 sm:w-[280px] sm:flex-none"
                         value={selectedVersion ? versionKey(selectedVersion) : undefined}
                         options={versionOptions}
                         onChange={switchVersion}
@@ -599,6 +671,9 @@ export default function Reader({
                         showSearch
                         optionFilterProp="label"
                         popupMatchSelectWidth={false}
+                        classNames={{ popup: { root: 'max-w-[calc(100vw-24px)]' } }}
+                        labelRender={({ value }) => renderVersionLabel(value)}
+                        optionRender={(option) => renderVersionOption(option.value)}
                     />
 
                     <div className="hidden lg:block">{layoutControls}</div>
@@ -692,6 +767,7 @@ export default function Reader({
                                     columns={effectiveSpread ? 2 : 1}
                                     screenIndex={screenIndex}
                                     locale={selectedVersion?.target_language}
+                                    chapterPositions={chapterPositions}
                                     onScreenCountChange={handleScreenCountChange}
                                 />
                             </div>
@@ -701,7 +777,7 @@ export default function Reader({
                     {!indexLoading && index.pages.length > 0 && visibleReady && (
                         <>
                             <Button
-                                className="reader-edge-arrow absolute left-1 top-1/2 z-10 inline-flex -translate-y-1/2 sm:left-2"
+                                className="reader-edge-arrow absolute left-1 top-1/2 z-10 inline-flex h-11! w-11! -translate-y-1/2 sm:left-2"
                                 shape="circle"
                                 icon={<LeftOutlined />}
                                 onClick={goPrevious}
@@ -709,7 +785,7 @@ export default function Reader({
                                 aria-label={t('reader.previous')}
                             />
                             <Button
-                                className="reader-edge-arrow absolute right-1 top-1/2 z-10 inline-flex -translate-y-1/2 sm:right-2"
+                                className="reader-edge-arrow absolute right-1 top-1/2 z-10 inline-flex h-11! w-11! -translate-y-1/2 sm:right-2"
                                 shape="circle"
                                 icon={<RightOutlined />}
                                 onClick={goNext}
@@ -725,19 +801,30 @@ export default function Reader({
                 <span className="hidden shrink-0 text-[11px] text-ink-500 sm:inline">
                     {t('reader.onlyTranslated')}
                 </span>
+                <span className="shrink-0 text-[11px] text-ink-500 sm:hidden">
+                    {t('reader.onlyTranslatedShort')}
+                </span>
 
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <div className="h-1 min-w-[40px] flex-1 overflow-hidden rounded-full bg-parchment-200">
+                    <div
+                        role="progressbar"
+                        aria-label={t('reader.progressAria')}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={Math.round(progress)}
+                        aria-valuetext={locationLabel}
+                        className="h-1 min-w-[40px] flex-1 overflow-hidden rounded-full bg-parchment-200"
+                    >
                         <div
                             className="h-full rounded-full bg-leather-600/70 transition-[width] duration-300"
                             style={{ width: `${progress}%` }}
                         />
                     </div>
-                    <span className="hidden whitespace-nowrap text-[11px] text-ink-500 sm:inline">
+                    <span className="whitespace-nowrap text-[11px] text-ink-500">
                         {locationLabel}
                     </span>
                     {visibleReady && screenCount > 0 && (
-                        <span className="whitespace-nowrap text-[11px] tabular-nums text-ink-500">
+                        <span className="hidden whitespace-nowrap text-[11px] tabular-nums text-ink-500 sm:inline">
                             {t('reader.screenOf', {
                                 current: currentScreen,
                                 total: screenCount,
@@ -752,7 +839,7 @@ export default function Reader({
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
                 placement="left"
-                width={320}
+                size={320}
                 closable={false}
                 styles={{ body: { padding: 0 } }}
             >
