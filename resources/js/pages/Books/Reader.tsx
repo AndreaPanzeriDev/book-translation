@@ -2,7 +2,6 @@ import {
     AlignLeftOutlined,
     ArrowLeftOutlined,
     BookOutlined,
-    CloseOutlined,
     LeftOutlined,
     MenuOutlined,
     RightOutlined,
@@ -479,17 +478,26 @@ export default function Reader({
 
     const sidebarOpen = largeScreen ? sidebarVisible : drawerOpen;
 
-    const toggleSidebar = () => {
+    const openSidebar = () => {
         if (largeScreen) {
-            const next = !sidebarVisible;
-
-            setSidebarVisible(next);
-            persistSidebar(next);
+            setSidebarVisible(true);
+            persistSidebar(true);
 
             return;
         }
 
-        setDrawerOpen((open) => !open);
+        setDrawerOpen(true);
+    };
+
+    const closeSidebar = () => {
+        if (largeScreen) {
+            setSidebarVisible(false);
+            persistSidebar(false);
+
+            return;
+        }
+
+        setDrawerOpen(false);
     };
 
     const selectChapter = (chapterId: number) => {
@@ -559,21 +567,16 @@ export default function Reader({
                         />
                     </Tooltip>
 
-                    <Tooltip
-                        title={
-                            sidebarOpen ? t('reader.closeSidebar') : t('reader.openSidebar')
-                        }
-                    >
-                        <Button
-                            type="text"
-                            icon={sidebarOpen ? <CloseOutlined /> : <MenuOutlined />}
-                            onClick={toggleSidebar}
-                            aria-label={
-                                sidebarOpen ? t('reader.closeSidebar') : t('reader.openSidebar')
-                            }
-                            aria-expanded={sidebarOpen}
-                        />
-                    </Tooltip>
+                    {!sidebarOpen && (
+                        <Tooltip title={t('reader.openSidebar')}>
+                            <Button
+                                type="text"
+                                icon={<MenuOutlined />}
+                                onClick={openSidebar}
+                                aria-label={t('reader.openSidebar')}
+                            />
+                        </Tooltip>
+                    )}
 
                     <div className="min-w-0 flex-1">
                         <h1 className="truncate font-reading text-base leading-tight text-ink-900 sm:text-lg">
@@ -612,6 +615,7 @@ export default function Reader({
                             currentChapterId={currentChapterId}
                             translatedPages={index.translated_pages}
                             onSelectChapter={selectChapter}
+                            onClose={closeSidebar}
                         />
                     </aside>
                 )}
@@ -759,6 +763,7 @@ export default function Reader({
                     currentChapterId={currentChapterId}
                     translatedPages={index.translated_pages}
                     onSelectChapter={selectChapter}
+                    onClose={closeSidebar}
                 />
             </Drawer>
         </div>
