@@ -234,6 +234,12 @@ body {
     color: var(--color-ink-900);
 }
 
+.reader-sidebar-drawer .ant-drawer-content-wrapper,
+.reader-sidebar-drawer .ant-drawer-mask {
+    top: 3.5rem;
+    height: calc(100% - 3.5rem);
+}
+
 @media (min-width: 1280px) {
     .reader-flow {
         --reader-column-gap: 3.25rem;

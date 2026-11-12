@@ -2,12 +2,13 @@ import {
     AlignLeftOutlined,
     ArrowLeftOutlined,
     BookOutlined,
+    CloseOutlined,
     LeftOutlined,
     MenuOutlined,
     RightOutlined,
 } from '@ant-design/icons';
 import { router } from '@inertiajs/react';
-import { Alert, Button, Drawer, Empty, Segmented, Select, Spin, Tooltip } from 'antd';
+import { Alert, Button, Drawer, Empty, Select, Spin, Tooltip } from 'antd';
 import axios from 'axios';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -15,12 +16,7 @@ import { useTranslation } from 'react-i18next';
 import ReaderCanvas from '@/components/ReaderCanvas';
 import ReaderSidebar from '@/components/ReaderSidebar';
 import { languageLabel } from '@/lib/languages';
-import {
-    buildSpreads,
-    nearestPageId,
-    scopePages,
-    versionKey,
-} from '@/lib/reader';
+import { buildSpreads, nearestPageId, versionKey } from '@/lib/reader';
 import { subscribeReaderKeyboard } from '@/lib/readerKeyboard';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import type {
@@ -30,7 +26,6 @@ import type {
     ReaderLayout,
     ReaderPageContent,
     ReaderPageIndexItem,
-    ReaderScope,
     ReaderVersion,
 } from '@/types';
 
@@ -46,7 +41,6 @@ interface ReaderProps {
     initialPageId: number | null;
     initialChapterId: number | null;
     initialPages: ReaderPageContent[];
-    initialScope: ReaderScope;
 }
 
 interface VersionParams {
@@ -108,7 +102,6 @@ export default function Reader({
     readerIndex,
     initialPageId,
     initialPages,
-    initialScope,
 }: ReaderProps) {
     const { t } = useTranslation();
     const wideScreen = useMediaQuery('(min-width: 1280px)');
@@ -117,7 +110,6 @@ export default function Reader({
     const [selectedVersion, setSelectedVersion] = useState<ReaderVersion | null>(initialVersion);
     const [index, setIndex] = useState<ReaderIndex>(readerIndex);
     const [currentPageId, setCurrentPageId] = useState<number | null>(initialPageId);
-    const [scope, setScope] = useState<ReaderScope>(initialScope);
     const [layout, setLayout] = useState<ReaderLayout>(readStoredLayout);
     const [sidebarVisible, setSidebarVisible] = useState(readStoredSidebar);
     const [pages, setPages] = useState<Record<number, ReaderPageContent>>(() => {
@@ -168,12 +160,7 @@ export default function Reader({
         [t, versions],
     );
 
-    const scopedPages = useMemo(
-        () => scopePages(index.pages, currentPage, scope),
-        [currentPage, index.pages, scope],
-    );
-
-    const spreads = useMemo(() => buildSpreads(scopedPages), [scopedPages]);
+    const spreads = useMemo(() => buildSpreads(index.pages), [index.pages]);
 
     const spreadIndex = useMemo(
         () =>
@@ -185,9 +172,9 @@ export default function Reader({
         [currentPage, spreads],
     );
 
-    const scopedIndex = scopedPages.findIndex((page) => page.id === currentPageId);
+    const pageIndex = index.pages.findIndex((page) => page.id === currentPageId);
 
-    const effectiveSpread = layout === 'spread' && wideScreen && scope !== 'page';
+    const effectiveSpread = layout === 'spread' && wideScreen;
     const activeLayout: ReaderLayout = effectiveSpread ? 'spread' : 'single';
 
     const visibleIndexPages = useMemo(() => {
@@ -217,8 +204,8 @@ export default function Reader({
             return spreadIndex > 0 ? (spreads[spreadIndex - 1]?.[0] ?? null) : null;
         }
 
-        return scopedIndex > 0 ? (scopedPages[scopedIndex - 1] ?? null) : null;
-    }, [effectiveSpread, scopedIndex, scopedPages, spreadIndex, spreads]);
+        return pageIndex > 0 ? (index.pages[pageIndex - 1] ?? null) : null;
+    }, [effectiveSpread, index.pages, pageIndex, spreadIndex, spreads]);
 
     const nextTarget = useMemo<ReaderPageIndexItem | null>(() => {
         if (effectiveSpread) {
@@ -227,10 +214,10 @@ export default function Reader({
                 : null;
         }
 
-        return scopedIndex >= 0 && scopedIndex < scopedPages.length - 1
-            ? (scopedPages[scopedIndex + 1] ?? null)
+        return pageIndex >= 0 && pageIndex < index.pages.length - 1
+            ? (index.pages[pageIndex + 1] ?? null)
             : null;
-    }, [effectiveSpread, scopedIndex, scopedPages, spreadIndex, spreads]);
+    }, [effectiveSpread, index.pages, pageIndex, spreadIndex, spreads]);
 
     const positions = visibleIndexPages.map((page) => page.position);
     const firstPosition = positions.length > 0 ? Math.min(...positions) : null;
@@ -250,7 +237,7 @@ export default function Reader({
             ? Math.min(100, (lastPosition / book.pages_count) * 100)
             : 0;
 
-    const spreadUnavailable = !wideScreen || scope === 'page';
+    const spreadUnavailable = !wideScreen;
     const currentScreen = screenCount > 0 ? Math.min(screenIndex, screenCount - 1) + 1 : 0;
 
     const resetScreen = useCallback(() => {
@@ -429,7 +416,6 @@ export default function Reader({
             account_id: String(selectedVersion.account_id),
             model: selectedVersion.model,
             target_language: selectedVersion.target_language,
-            scope,
         });
 
         if (currentPageId !== null) {
@@ -445,7 +431,7 @@ export default function Reader({
             '',
             `${window.location.pathname}?${params.toString()}`,
         );
-    }, [currentChapterId, currentPageId, scope, selectedVersion]);
+    }, [currentChapterId, currentPageId, selectedVersion]);
 
     const switchVersion = async (key: string) => {
         const nextVersion = versions.find((version) => versionKey(version) === key);
@@ -491,29 +477,19 @@ export default function Reader({
         }
     };
 
-    const changeScope = (nextScope: ReaderScope) => {
-        if (nextScope === scope) {
-            return;
-        }
+    const sidebarOpen = largeScreen ? sidebarVisible : drawerOpen;
 
-        resetScreen();
-        setScope(nextScope);
-    };
-
-    const openSidebar = () => {
+    const toggleSidebar = () => {
         if (largeScreen) {
-            setSidebarVisible(true);
-            persistSidebar(true);
+            const next = !sidebarVisible;
+
+            setSidebarVisible(next);
+            persistSidebar(next);
 
             return;
         }
 
-        setDrawerOpen(true);
-    };
-
-    const closeSidebar = () => {
-        setSidebarVisible(false);
-        persistSidebar(false);
+        setDrawerOpen((open) => !open);
     };
 
     const selectChapter = (chapterId: number) => {
@@ -525,11 +501,6 @@ export default function Reader({
 
         resetScreen();
         setCurrentPageId(firstPage.id);
-
-        if (scope === 'page') {
-            setScope('chapter');
-        }
-
         setDrawerOpen(false);
     };
 
@@ -575,24 +546,10 @@ export default function Reader({
         </div>
     );
 
-    const scopeControl = (
-        <Segmented
-            value={scope}
-            size="small"
-            block
-            options={[
-                { value: 'page', label: t('reader.scopePage') },
-                { value: 'chapter', label: t('reader.scopeChapter') },
-                { value: 'book', label: t('reader.scopeBook') },
-            ]}
-            onChange={(value) => changeScope(value as ReaderScope)}
-        />
-    );
-
     return (
-        <div className="flex h-dvh flex-col overflow-hidden bg-parchment-50 text-ink-900">
+        <div className="reader-shell flex h-dvh flex-col overflow-hidden bg-parchment-50 text-ink-900">
             <header className="shrink-0 border-b border-parchment-200 bg-white/90 backdrop-blur">
-                <div className="flex items-center gap-2 px-3 pt-2 sm:px-4">
+                <div className="flex h-14 items-center gap-2 px-3 sm:px-4">
                     <Tooltip title={t('reader.backAria')}>
                         <Button
                             type="text"
@@ -601,16 +558,22 @@ export default function Reader({
                             aria-label={t('reader.backAria')}
                         />
                     </Tooltip>
-                    {(!largeScreen || !sidebarVisible) && (
-                        <Tooltip title={t('reader.openSidebar')}>
-                            <Button
-                                type="text"
-                                icon={<MenuOutlined />}
-                                onClick={openSidebar}
-                                aria-label={t('reader.openSidebar')}
-                            />
-                        </Tooltip>
-                    )}
+
+                    <Tooltip
+                        title={
+                            sidebarOpen ? t('reader.closeSidebar') : t('reader.openSidebar')
+                        }
+                    >
+                        <Button
+                            type="text"
+                            icon={sidebarOpen ? <CloseOutlined /> : <MenuOutlined />}
+                            onClick={toggleSidebar}
+                            aria-label={
+                                sidebarOpen ? t('reader.closeSidebar') : t('reader.openSidebar')
+                            }
+                            aria-expanded={sidebarOpen}
+                        />
+                    </Tooltip>
 
                     <div className="min-w-0 flex-1">
                         <h1 className="truncate font-reading text-base leading-tight text-ink-900 sm:text-lg">
@@ -620,8 +583,6 @@ export default function Reader({
                             {book.author ?? t('common.authorUnknown')}
                         </p>
                     </div>
-
-                    <div className="hidden w-[320px] lg:block">{scopeControl}</div>
 
                     <Select
                         className="w-[150px] min-w-[120px] sm:w-[280px]"
@@ -639,11 +600,6 @@ export default function Reader({
 
                     <div className="hidden lg:block">{layoutControls}</div>
                 </div>
-
-                <div className="flex items-center gap-2 px-3 pb-2 pt-2 lg:hidden">
-                    <div className="min-w-0 flex-1">{scopeControl}</div>
-                    {layoutControls}
-                </div>
             </header>
 
             <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -656,7 +612,6 @@ export default function Reader({
                             currentChapterId={currentChapterId}
                             translatedPages={index.translated_pages}
                             onSelectChapter={selectChapter}
-                            onClose={closeSidebar}
                         />
                     </aside>
                 )}
@@ -719,7 +674,7 @@ export default function Reader({
                             )}
                         </div>
                     ) : (
-                        <div className="absolute inset-0 px-5 py-4 sm:px-14 sm:py-6 lg:px-16">
+                        <div className="absolute inset-0 px-12 py-4 sm:px-14 sm:py-6 lg:px-16">
                             <div
                                 className={
                                     effectiveSpread
@@ -742,7 +697,7 @@ export default function Reader({
                     {!indexLoading && index.pages.length > 0 && visibleReady && (
                         <>
                             <Button
-                                className="reader-edge-arrow absolute left-2 top-1/2 z-10 hidden -translate-y-1/2 sm:inline-flex"
+                                className="reader-edge-arrow absolute left-1 top-1/2 z-10 inline-flex -translate-y-1/2 sm:left-2"
                                 shape="circle"
                                 icon={<LeftOutlined />}
                                 onClick={goPrevious}
@@ -750,7 +705,7 @@ export default function Reader({
                                 aria-label={t('reader.previous')}
                             />
                             <Button
-                                className="reader-edge-arrow absolute right-2 top-1/2 z-10 hidden -translate-y-1/2 sm:inline-flex"
+                                className="reader-edge-arrow absolute right-1 top-1/2 z-10 inline-flex -translate-y-1/2 sm:right-2"
                                 shape="circle"
                                 icon={<RightOutlined />}
                                 onClick={goNext}
@@ -786,24 +741,10 @@ export default function Reader({
                         </span>
                     )}
                 </div>
-
-                <Button
-                    size="small"
-                    icon={<LeftOutlined />}
-                    onClick={goPrevious}
-                    disabled={!canGoPrevious}
-                    aria-label={t('reader.previous')}
-                />
-                <Button
-                    size="small"
-                    icon={<RightOutlined />}
-                    onClick={goNext}
-                    disabled={!canGoNext}
-                    aria-label={t('reader.next')}
-                />
             </footer>
 
             <Drawer
+                rootClassName="reader-sidebar-drawer"
                 open={drawerOpen}
                 onClose={() => setDrawerOpen(false)}
                 placement="left"
@@ -818,7 +759,6 @@ export default function Reader({
                     currentChapterId={currentChapterId}
                     translatedPages={index.translated_pages}
                     onSelectChapter={selectChapter}
-                    onClose={() => setDrawerOpen(false)}
                 />
             </Drawer>
         </div>

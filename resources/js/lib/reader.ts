@@ -1,8 +1,4 @@
-import type {
-    ReaderPageIndexItem,
-    ReaderScope,
-    ReaderVersion,
-} from '@/types';
+import type { ReaderPageIndexItem, ReaderVersion } from '@/types';
 
 export function versionKey(version: ReaderVersion): string {
     return `${version.account_id}::${version.model}::${version.target_language}`;
@@ -46,26 +42,6 @@ export function buildSpreads(pages: ReaderPageIndexItem[]): ReaderPageIndexItem[
     }
 
     return spreads;
-}
-
-export function scopePages(
-    pages: ReaderPageIndexItem[],
-    currentPage: ReaderPageIndexItem | null,
-    scope: ReaderScope,
-): ReaderPageIndexItem[] {
-    if (scope === 'page') {
-        return currentPage ? [currentPage] : [];
-    }
-
-    if (scope === 'chapter') {
-        if (!currentPage) {
-            return [];
-        }
-
-        return pages.filter((page) => page.chapter_id === currentPage.chapter_id);
-    }
-
-    return pages;
 }
 
 /**

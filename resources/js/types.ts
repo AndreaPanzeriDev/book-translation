@@ -91,8 +91,6 @@ export interface ReaderPageContent {
     blocks: ReaderPageBlock[];
 }
 
-export type ReaderScope = 'page' | 'chapter' | 'book';
-
 export type ReaderLayout = 'single' | 'spread';
 
 export interface AiModel {
